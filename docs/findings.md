@@ -86,3 +86,22 @@ Also measure, car off: switch-wire resting voltage and resistance to ground.
    pigtail.
 2. Single-wire tap on the switch signal (plus ground/IGN from elsewhere).
 3. Back-probe piggyback - testing only.
+
+## Car behaviour with the panel unplugged
+
+Observed: the car starts and drives normally with the switch panel unplugged.
+Not yet checked: whether Parking Safety still comes on at startup, which
+warnings or stored fault codes appear, and whether the seat and wheel heaters
+still work from the screen.
+
+Consequences:
+
+- The panel is not required for driving, so bench work and failed experiments
+  are low-stakes. Unplug and replug only with the car off.
+- Capture CAN traffic on header pins 7/8 with the panel plugged in, then
+  unplugged. Message IDs that disappear are the ones the panel sends; the
+  Parking Safety button lives in one of those.
+- Because the car tolerates the panel's absence, a man-in-the-middle board
+  (panel on one side, car on the other, forwarding everything except the
+  button signal) is a realistic option. A full replacement that impersonates
+  the panel would also avoid fighting the real panel's messages.
