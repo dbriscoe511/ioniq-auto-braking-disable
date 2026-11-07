@@ -17,17 +17,17 @@ See [teardown.md](teardown.md) for the step-by-step guide with photos.
   - Reverse/camera button, no LED
 - Connector: **KET, 16 positions (2x8), 14 populated**, yellow terminal-position
   lock. Exact KET part number not yet found.
-- Board: IP-678A with an Atmel MCU (U2) and a SOIC-14 (U1). See
-  [electronics.md](electronics.md). The 4-pad `110` part beside U1 matches
-  a CAN common mode choke, so the panel is probably a CAN node and the button
-  press probably leaves as a bus message rather than on its own wire.
+- Board: IP-678A with an Atmel SAM C21 MCU (U2, likely ATSAMC21G) and an NXP
+  UJA1164A CAN system basis chip (U1), plus a CAN common mode choke. See
+  [electronics.md](electronics.md). The panel is a CAN node, so the button
+  press leaves as a CAN frame rather than on its own wire.
 
 ### Interpretation
 
 5 buttons + 9 LEDs = 14 signals, equal to the populated pin count, yet the
 panel also needs ground and likely supply/backlight. So some signals share
 wires (common grounds, grouped LEDs, or a resistor-ladder button input).
-The onboard MCU and likely CAN transceiver mean the button is probably read
+The onboard MCU and CAN chip mean the button is probably read
 on the board; the remaining wires are likely power, wake and backlight. Older Ioniq 5 / 2024 Ioniq 6 diagrams show dedicated
 `PDW SW SIG` and `PDW SW IND` circuits, consistent with this.
 

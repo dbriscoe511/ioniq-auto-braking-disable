@@ -10,51 +10,72 @@ starts `93310…`; OEM part for the XRT console switch is `93310-GIAB0-MEE`.
 
 The board has exactly two ICs.
 
-### U2: Atmel microcontroller (QFN)
+### U2: Atmel SAM C21 microcontroller (likely ATSAMC21G, QFN48)
 
 | | | |
 |---|---|---|
 | ![U2](../photos/electronics/02-u2-atmel-mcu.jpg) | ![U2 close](../photos/electronics/07-u2-marking-closeup.png) | ![U2 enhanced](../photos/electronics/09-u2-marking-enhanced.jpg) |
 
-- Readable marking: `Atmel` / `…21` (first digits obscured) / a lot or trace
-  line ending `…03EU`, with a partial line containing `…LQ…` and `…H` in
-  earlier photos. The full part number is still unreadable.
-- Crystal `X1` and load parts (`XR1`, `XR2`) next to it.
-- Candidates:
-  - Atmel LIN system-in-package (ATA6612C/6613C/6614Q): QFN48 7x7 mm,
-    ordering suffix `-PLQW`, which could explain the `LQ` fragment.
-  - An Atmel AVR with built-in CAN (AT90CAN or ATmega16/32/64M1/C1), which
-    would fit if the board is a CAN node (see U1).
-- ATA6621 is ruled out: it is a 5x5 mm QFN20, and this package has far more
-  pins.
-- Count the pins and measure the body size: 48 pins on 7x7 mm points to the
-  LIN SiP; 32 or 64 pins points elsewhere.
+Marking as read under better light (`?` = unreadable):
 
-### U1: SOIC-14, probably a CAN transceiver
+```
+Atmel
+????C21
+GH????
+403
+2403EQ
+```
+
+An earlier photo also showed `ARM`.
+
+- `…C21` plus `ARM` points to the **Atmel SAM C21**, a 5 V-tolerant automotive
+  ARM Cortex-M0+ with on-chip CAN-FD controllers. That pairs naturally with
+  the CAN chip in U1.
+- In SAM part numbers the letter after `C21` gives the pin count:
+  E = 32, **G = 48**, J = 64. A 48-pin QFN fits this package, so the second
+  line is probably the rest of an `ATSAMC21G…` part number. Unconfirmed.
+- `2403EQ` and `403` are probably lot and date codes.
+- Debug is 2-wire SWD: SWCLK on PA30 and SWDIO on PA31
+  ([Microchip SWD pinout](https://onlinedocs.microchip.com/oxy/GUID-2BBF0A73-A043-4A40-A6CA-0FF154E4BFFE-en-US-8/GUID-6E157C8B-5346-4B90-937E-6BB12F591BF9.html)).
+- Crystal `X1` and load parts (`XR1`, `XR2`) next to it.
+- Earlier guesses (ATA66xx LIN chips, AT90CAN/ATmega M1) are superseded.
+
+### U1: NXP UJA1164A CAN system basis chip (SO14)
 
 | | |
 |---|---|
 | ![U1](../photos/electronics/04-u1-soic14.jpg) | ![U1 close](../photos/electronics/08-u1-marking-closeup.png) |
 
-- Laser marking too faint to read, even with contrast enhancement.
-- The strongest clue is `L1`, the 4-pad black part marked `110` beside it, close
-  to the board connector. That matches the TDK ACT1210-110 (11 µH), a common
-  mode choke made for CAN and FlexRay lines
-  ([LCSC](https://www.lcsc.com/product-detail/C694257.html)). Common mode
-  chokes are what sit between a CAN transceiver and the connector.
-- Many automotive CAN transceivers come in SO14 (e.g. NXP TJA1043 and
-  TJA1145, TI TCAN1043). Typical SO14 CAN transceivers put CANL/CANH on
-  pins 12/13 and also have INH, WAKE and VBAT pins.
-- If correct, the panel is a **CAN node**, and the Parking Safety press likely
-  leaves as a CAN frame on whichever bus segment the panel sits on.
+Marking as read under better light:
 
-To confirm on the bench (car side unplugged):
+```
+NXP
+U1164A
+HN65150   (low confidence)
+2624210
+```
 
-1. Check that L1 has four terminals and that two of them go to adjacent
-   connector pins, ideally a twisted pair in the harness.
-2. Follow L1's other two terminals to U1 and note the pin numbers.
-3. In the car, scope those two connector pins. CAN idles with both at ~2.5 V
-   and splits to ~3.5 V / ~1.5 V during traffic.
+- `U1164A` is NXP's abbreviated marking for the **UJA1164A**, a high-speed
+  CAN "mini system basis chip". It combines a CAN transceiver, a 5 V
+  regulator that powers the MCU, a watchdog and standby/sleep handling, in
+  SO14 ([UJA1164 summary](https://dtsheet.com/model/3708508)).
+- SO14 pins from the UJA1164 datasheet: 1 TXD, 2 GND, 3 V1 (5 V output to the
+  MCU), 4 RXD, 5 RSTN, 10 BAT, 12 **CANL**, 13 **CANH**. The A variant may
+  differ on the SPI/config pins, so check the UJA1164A datasheet before
+  relying on the rest.
+- `L1` (4 pads, marked `110`) matches the TDK ACT1210-110 CAN common mode choke
+  ([LCSC](https://www.lcsc.com/product-detail/C694257.html)), between U1's
+  CANH/CANL and the connector.
+- **Conclusion: the panel is a CAN node.** The Parking Safety press almost
+  certainly leaves as a CAN frame.
+
+To find the CAN pins on the connector (bench, unplugged):
+
+1. Continuity from U1 pin 12 (CANL) and pin 13 (CANH), through L1, to the
+   16-pin header. Expect two adjacent pins.
+2. In the car, scope them: both ~2.5 V at idle, splitting to ~3.5 V / ~1.5 V
+   during traffic.
+3. Also map U1 pin 10 (BAT) and pin 2 (GND) to the header for power.
 
 ## CON2: 5-pin header and test points
 
@@ -62,19 +83,22 @@ To confirm on the bench (car side unplugged):
 
 - Unpopulated 5-hole through-hole header `CON2` with pin 1 marked by the
   triangle at `TP5`; test points `TP6` and others nearby.
-- Most likely a factory programming/debug port for U2 (AVR ISP, debugWIRE or
-  a UART). Map each pin to U2 with a continuity tester before connecting
-  anything.
+- Five pins is exactly a standard SWD set (VCC, GND, SWDIO, SWCLK, RESET), so
+  this is most likely the factory SWD port for the SAM C21. Confirm by
+  continuity to U2's PA30/PA31 and reset pins.
+- Automotive firmware is usually read-protected (security bit set), so a dump
+  may not be possible. Never mass-erase: a chip-erase clears the protection
+  but also wipes the firmware and bricks the panel.
 
 ## What this means for the mod
 
-A microcontroller on the panel, likely behind a CAN transceiver, means the
+A microcontroller on the panel, behind a CAN system basis chip, means the
 Parking Safety button probably does **not** have its own connector wire. The
 MCU reads the buttons locally and reports them on the bus. The other wires
 are probably power, ground, wake/ignition and backlight, plus any loads the
 panel drives directly.
 
-If it is CAN, this is the bus access the earlier OBD attempt could not get
+Being on CAN, this is likely the bus access the earlier OBD attempt could not get
 past the security gateway: sniff these two pins, press Parking Safety, and
 look for the frame that changes. Replaying a frame is still riskier than
 emulating the button, so the simplest reliable tap remains across the switch
