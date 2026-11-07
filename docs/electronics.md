@@ -10,7 +10,7 @@ starts `93310…`; OEM part for the XRT console switch is `93310-GIAB0-MEE`.
 
 The board has exactly two ICs.
 
-### U2: Atmel SAM C21 microcontroller (likely ATSAMC21G, QFN48)
+### U2: Atmel ATSAMC21G17A (QFN48)
 
 | | | |
 |---|---|---|
@@ -31,9 +31,10 @@ An earlier photo also showed `ARM`.
 - `…C21` plus `ARM` points to the **Atmel SAM C21**, a 5 V-tolerant automotive
   ARM Cortex-M0+ with on-chip CAN-FD controllers. That pairs naturally with
   the CAN chip in U1.
-- In SAM part numbers the letter after `C21` gives the pin count:
-  E = 32, **G = 48**, J = 64. A 48-pin QFN fits this package, so the second
-  line is probably the rest of an `ATSAMC21G…` part number. Unconfirmed.
+- **Confirmed: `ATSAMC21G17A-Z…`** (48 pins, 128 KB flash, 16 KB RAM). The
+  `Z` suffix letter likely marks the automotive/125 °C grade.
+- Runs from U1's V1 output, so the debug I/O is probably **5 V**. Measure
+  CON2 pin 1 before connecting a probe.
 - `2403EQ` and `403` are probably lot and date codes.
 - Debug is 2-wire SWD: SWCLK on PA30 and SWDIO on PA31
   ([Microchip SWD pinout](https://onlinedocs.microchip.com/oxy/GUID-2BBF0A73-A043-4A40-A6CA-0FF154E4BFFE-en-US-8/GUID-6E157C8B-5346-4B90-937E-6BB12F591BF9.html)).
@@ -71,11 +72,11 @@ HN65150   (low confidence)
 
 To find the CAN pins on the connector (bench, unplugged):
 
-1. Continuity from U1 pin 12 (CANL) and pin 13 (CANH), through L1, to the
-   16-pin header. Expect two adjacent pins.
+1. Measured: L1 top goes to header pin 7, bottom to pin 8. Trace L1's other
+   side to U1 pin 12 (CANL) / 13 (CANH) to tell which is which.
 2. In the car, scope them: both ~2.5 V at idle, splitting to ~3.5 V / ~1.5 V
    during traffic.
-3. Also map U1 pin 10 (BAT) and pin 2 (GND) to the header for power.
+3. Header pin 16 is ground. Still to map: U1 pin 10 (BAT) to the header.
 
 ## CON2: 5-pin header and test points
 
@@ -83,9 +84,14 @@ To find the CAN pins on the connector (bench, unplugged):
 
 - Unpopulated 5-hole through-hole header `CON2` with pin 1 marked by the
   triangle at `TP5`; test points `TP6` and others nearby.
-- Five pins is exactly a standard SWD set (VCC, GND, SWDIO, SWCLK, RESET), so
-  this is most likely the factory SWD port for the SAM C21. Confirm by
-  continuity to U2's PA30/PA31 and reset pins.
+- Measured: pin 1 goes to a capacitor (likely VCC), pin 3 is GND. That fits
+  the common 5-pin SWD order `1 VCC, 2 SWDIO, 3 GND, 4 SWCLK, 5 RESET`
+  (the odd pins of the 10-pin Cortex header), but no single 5-pin standard
+  exists. Confirm by
+  continuity to U2: on the 48-pin SAM C21/D21 package, RESETN is pin 40,
+  PA30/SWCLK pin 45, PA31/SWDIO pin 46 (check the C21 datasheet).
+- The probe must handle 5 V I/O (J-Link, Atmel-ICE), or use a level shifter.
+  A 3.3 V-only probe such as a bare Pico can be damaged.
 - Automotive firmware is usually read-protected (security bit set), so a dump
   may not be possible. Never mass-erase: a chip-erase clears the protection
   but also wipes the firmware and bricks the panel.

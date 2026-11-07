@@ -59,8 +59,8 @@ Also measure, car off: switch-wire resting voltage and resistance to ground.
 | 4 | | | | | |
 | 5 | | | | | |
 | 6 | | | | | |
-| 7 | | | | | |
-| 8 | | | | | |
+| 7 | | | | | CAN (via L1 top; H/L TBD) |
+| 8 | | | | | CAN (via L1 bottom; H/L TBD) |
 | 9 | | | | | |
 | 10 | | | | | |
 | 11 | | | | | |
@@ -68,7 +68,7 @@ Also measure, car off: switch-wire resting voltage and resistance to ground.
 | 13 | | | | | |
 | 14 | | | | | |
 | 15 | | | | | |
-| 16 | | | | | |
+| 16 | | 0 V | | | Ground |
 
 ## Proposed circuit (pending measurements)
 
