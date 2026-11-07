@@ -28,10 +28,15 @@ Ruled out so far:
 
 ## Findings
 
-See [docs/findings.md](docs/findings.md) for the console teardown, connector
-details, and the probing plan.
+- [Teardown guide](docs/teardown.md): removing the console panel and switch
+  assembly. Panel removal credit:
+  [r/Ioniq5 MagSafe install post](https://www.reddit.com/r/Ioniq5/comments/1t76ayr/built_in_magsafe_phone_charger_without_exposed/).
+- [Electronics](docs/electronics.md): switch PCB, ICs, debug header.
+- [Findings](docs/findings.md): connector, probing plan, pin table, circuit
+  ideas.
 
 ## Layout
 
-- `docs/findings.md` - hardware notes and measurements
-- `docs/photos/` - teardown photos
+- `docs/` - guides and notes
+- `photos/teardown/` - disassembly photos
+- `photos/electronics/` - PCB and chip photos

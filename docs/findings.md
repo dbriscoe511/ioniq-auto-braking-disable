@@ -4,17 +4,7 @@ Vehicle: 2025 Hyundai Ioniq 5 XRT (facelift, ccNC infotainment).
 
 ## Console teardown
 
-Glossy upper console panel removal (from a 2026 Ioniq 5 owner, same facelift
-console):
-[r/Ioniq5 teardown with photos](https://www.reddit.com/r/Ioniq5/comments/1t76ayr/built_in_magsafe_phone_charger_without_exposed/)
-
-1. Remove both cupholder rubber mats.
-2. Remove the two screws, one under each mat.
-3. Wide plastic trim tool under the front-centre edge; pry up to release
-   roughly 6-8 clips.
-4. Work around the edges and lift without stretching the connectors.
-
-Disconnect the 12 V negative before unplugging connectors.
+See [teardown.md](teardown.md) for the step-by-step guide with photos.
 
 ## Switch panel
 
@@ -25,10 +15,11 @@ Disconnect the 12 V negative before unplugging connectors.
   - Steering-wheel heater button with 2 LEDs
   - Parking Safety button with 1 LED
   - Reverse/camera button, no LED
-- Connector: **16 positions, 14 populated**. Housing maker/part number not yet
-  identified (look for KET/KUM moulding on top, sides, latch).
-
-![Console switch connector](photos/console-switch-connector.png)
+- Connector: **KET, 16 positions (2x8), 14 populated**, yellow terminal-position
+  lock. Exact KET part number not yet found.
+- Board: IP-678A with an Atmel MCU (U2) and a SOIC-14 (U1). See
+  [electronics.md](electronics.md). Because the panel has its own MCU, the
+  button may be read locally and reported over LIN rather than wired out.
 
 ### Interpretation
 
