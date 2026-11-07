@@ -26,8 +26,8 @@ See [teardown.md](teardown.md) for the step-by-step guide with photos.
 5 buttons + 9 LEDs = 14 signals, equal to the populated pin count, yet the
 panel also needs ground and likely supply/backlight. So some signals share
 wires (common grounds, grouped LEDs, or a resistor-ladder button input).
-Fourteen wires is far too many for a CAN/LIN-only panel; expect discrete
-switch and LED wiring. Older Ioniq 5 / 2024 Ioniq 6 diagrams show dedicated
+Fourteen wires is a lot for a bus-only panel, but the onboard MCU means some
+functions may still go over LIN; expect a mix until probed. Older Ioniq 5 / 2024 Ioniq 6 diagrams show dedicated
 `PDW SW SIG` and `PDW SW IND` circuits, consistent with this.
 
 ## Probing plan
