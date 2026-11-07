@@ -72,11 +72,14 @@ HN65150   (low confidence)
 
 To find the CAN pins on the connector (bench, unplugged):
 
-1. Measured: L1 top goes to header pin 7, bottom to pin 8. Trace L1's other
-   side to U1 pin 12 (CANL) / 13 (CANH) to tell which is which.
+1. Measured: header pin 7 = CAN-L, pin 8 = CAN-H (through L1).
 2. In the car, scope them: both ~2.5 V at idle, splitting to ~3.5 V / ~1.5 V
    during traffic.
-3. Header pin 16 is ground. Still to map: U1 pin 10 (BAT) to the header.
+3. Header pin 1 = VBAT (reverse-polarity protected by D1/D2), pin 16 = ground.
+
+Bench power: feed 12 V into header pin 1 and ground on pin 16 from a
+current-limited supply (~100 mA limit), so U1 generates the 5 V rail as
+designed. Do not back-feed 5 V into the debug header instead.
 
 ## CON2: 5-pin header and test points
 

@@ -53,14 +53,14 @@ Also measure, car off: switch-wire resting voltage and resistance to ground.
 
 | Pin | Wire colour | Idle | Pressed | Toggled | Function |
 |---|---|---|---|---|---|
-| 1 | | | | | |
+| 1 | | | | | VBAT in (reverse-polarity protected by D1/D2) |
 | 2 | | | | | |
 | 3 | | | | | |
 | 4 | | | | | |
 | 5 | | | | | |
 | 6 | | | | | |
-| 7 | | | | | CAN (via L1 top; H/L TBD) |
-| 8 | | | | | CAN (via L1 bottom; H/L TBD) |
+| 7 | | | | | CAN-L (via L1) |
+| 8 | | | | | CAN-H (via L1) |
 | 9 | | | | | |
 | 10 | | | | | |
 | 11 | | | | | |
