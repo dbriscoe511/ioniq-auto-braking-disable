@@ -1,7 +1,9 @@
 # Teardown: console switch panel
 
-Vehicle: 2025 Ioniq 5 XRT (facelift console). Disconnect the 12 V negative
-before unplugging connectors.
+Vehicle: 2025 Ioniq 5 XRT (facelift console). Dan confirmed this removal
+method worked on his car on **2026-11-07**. Disconnect the 12 V negative
+before unplugging connectors; reconnect only after the panel is secured and
+loose tools/probes cannot short anything.
 
 ## 1. Remove the glossy upper console panel
 
@@ -40,3 +42,20 @@ carrier then come out of the housing together.
 | Assembly back | Edge clips |
 
 Board details are in [electronics.md](electronics.md).
+
+## 4. Keep the measurements tied to the right connector
+
+`CON1` is the 16-position vehicle connector; `CON2` is the separate five-hole
+header on the PCB. Mark orientation before bench work: “top” in a photograph
+is not a connector numbering standard. The current pin assignments and
+unverified details are in [findings.md](findings.md#con1-16-position-vehicle-connector).
+
+Keep the rubber membrane and carrier aligned when reassembling, seat the
+four clips, reconnect the harness latch, and refit the upper panel, screws
+and mats. Check the manual buttons/indicators after reassembly; no completed
+reassembly/function checklist was reported in the chat.
+
+Dan reports the car works fine with this module unplugged. That observation
+is recorded separately in [findings.md](findings.md#car-behaviour-with-the-panel-unplugged);
+it is not confirmation that rear auto-braking is off or all functions remain
+available.

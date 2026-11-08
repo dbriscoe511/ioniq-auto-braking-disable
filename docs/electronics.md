@@ -4,6 +4,11 @@ Board silkscreen: **IP-678A, 3022901 VER.1.00**. Button labels on the board
 include `RVM/AVM` (reverse/surround camera button, `3SW1`). Housing label
 starts `93310…`; OEM part for the XRT console switch is `93310-GIAB0-MEE`.
 
+Bench observations were supplied by Dan on **2026-11-07**. Distinguish the
+16-position vehicle connector **CON1**, the five-hole debug header **CON2**,
+and physical pins on U1/U2. No powered rail reading or debugger connection
+has yet been reported.
+
 ![PCB front](../photos/electronics/01-pcb-front-ip-678a.jpg)
 
 ## ICs
@@ -28,20 +33,22 @@ GH????
 
 An earlier photo also showed `ARM`.
 
-- `…C21` plus `ARM` points to the **Atmel SAM C21**, a 5 V-tolerant automotive
-  ARM Cortex-M0+ with on-chip CAN-FD controllers. That pairs naturally with
-  the CAN chip in U1.
-- **Confirmed: `ATSAMC21G17A-Z…`** (48 pins, 128 KB flash, 16 KB RAM). The
-  `Z` suffix letter likely marks the automotive/125 °C grade.
-- Runs from U1's V1 output, so the debug I/O is probably **5 V**. Measure
-  CON2 pin 1 before connecting a probe.
-- `2403EQ` and `403` are probably lot and date codes.
-- Debug is 2-wire SWD: SWCLK on PA30 and SWDIO on PA31
-  ([Microchip SWD pinout](https://onlinedocs.microchip.com/oxy/GUID-2BBF0A73-A043-4A40-A6CA-0FF154E4BFFE-en-US-8/GUID-6E157C8B-5346-4B90-937E-6BB12F591BF9.html)).
+- Dan later read the part as **`ATSAMC21G17A-Z`**. Preserve that reported
+  fragment rather than reconstructing an unread ordering suffix.
+- The [Microchip product page](https://www.microchip.com/en-us/product/ATSAMC21G17A)
+  identifies the G17A as a Cortex-M0+ with 128 KB flash and 16 KB SRAM.
+  The G package has 48 pins; the SAM C21 family has CAN-FD controllers.
+- A 5 V debug level is expected if the MCU is supplied by U1's V1 output,
+  but the board's actual supply routing/voltage still needs checking.
+- `2403EQ` and `403` are retained as raw markings; their meaning is unverified.
+- SWD uses PA30/SWCLK (pin 45) and PA31/SWDIO (pin 46); RESET is pin 40
+  in the 48-pin package. See the
+  [SAM C20/C21 datasheet](https://ww1.microchip.com/downloads/aemDocuments/documents/MCU32/ProductDocuments/DataSheets/SAM-C20-C21-Family-Data-Sheet-DS60001479.pdf),
+  sections 4.2 and 6.2.2.
 - Crystal `X1` and load parts (`XR1`, `XR2`) next to it.
 - Earlier guesses (ATA66xx LIN chips, AT90CAN/ATmega M1) are superseded.
 
-### U1: NXP UJA1164A CAN system basis chip (SO14)
+### U1: NXP UJA1164A CAN system basis chip (HVSON14)
 
 | | |
 |---|---|
@@ -56,30 +63,46 @@ HN65150   (low confidence)
 2624210
 ```
 
-- `U1164A` is NXP's abbreviated marking for the **UJA1164A**, a high-speed
-  CAN "mini system basis chip". It combines a CAN transceiver, a 5 V
-  regulator that powers the MCU, a watchdog and standby/sleep handling, in
-  SO14 ([UJA1164 summary](https://dtsheet.com/model/3708508)).
-- SO14 pins from the UJA1164 datasheet: 1 TXD, 2 GND, 3 V1 (5 V output to the
-  MCU), 4 RXD, 5 RSTN, 10 BAT, 12 **CANL**, 13 **CANH**. The A variant may
-  differ on the SPI/config pins, so check the UJA1164A datasheet before
-  relying on the rest.
-- `L1` (4 pads, marked `110`) matches the TDK ACT1210-110 CAN common mode choke
-  ([LCSC](https://www.lcsc.com/product-detail/C694257.html)), between U1's
-  CANH/CANL and the connector.
-- **Conclusion: the panel is a CAN node.** The Parking Safety press almost
-  certainly leaves as a CAN frame.
+- The `U1164A` reading identifies U1 as the **UJA1164A**. NXP specifies a
+  high-speed CAN transceiver, 5 V/100 mA regulator, watchdog, SPI and standby
+  handling. Its package is **HVSON14**, not the earlier SO14 guess; existing
+  photo filenames retain the old name. Source:
+  [NXP UJA1164A datasheet](https://www.nxp.com/docs/en/data-sheet/UJA1164A.pdf),
+  sections 1, 3 and 5.
+- UJA1164A pins: 1 TXD, 2 GND, 3 V1, 4 RXD, 5 RSTN, 10 BAT,
+  12 **CANL**, 13 **CANH**. Check pin-1 orientation before continuity work.
+- `L1` has four pads and is marked `110`. Its identification as a TDK
+  ACT1210-110 was an earlier candidate, not a confirmed exact part number.
+  Dan's tracing connects it to the reported CAN pair on CON1.
+- **The panel has CAN hardware.** Its specific Parking Safety message has
+  not been captured, and a separate button wire has not been ruled out by
+  tracing the button itself.
 
-To find the CAN pins on the connector (bench, unplugged):
+Reported connector mapping (bench, unplugged):
 
 1. Measured: header pin 7 = CAN-L, pin 8 = CAN-H (through L1).
-2. In the car, scope them: both ~2.5 V at idle, splitting to ~3.5 V / ~1.5 V
-   during traffic.
+2. L1's top connection in Dan's bench orientation goes to pin 7 / CAN-L;
+   its bottom connection goes to pin 8 / CAN-H.
 3. Header pin 1 = VBAT (reverse-polarity protected by D1/D2), pin 16 = ground.
 
-Bench power: feed 12 V into header pin 1 and ground on pin 16 from a
-current-limited supply (~100 mA limit), so U1 generates the 5 V rail as
-designed. Do not back-feed 5 V into the debug header instead.
+The connector-face orientation still needs documenting; see
+[the CON1 table](findings.md#con1-16-position-vehicle-connector).
+
+### Bench power and the debug-header power question
+
+Proposed bench setup: panel disconnected from the vehicle, current-limited
+12 V supply to **CON1 pin 1**, return to **CON1 pin 16**, initially around
+100 mA limit. This was advice, not a reported successful power-up or measured
+current draw. Verify polarity/numbering first, then record input current,
+U1 V1 and CON2 pin 1 voltage. Unexpected current limiting or reset cycling
+needs investigation, not an automatic increase in the limit.
+
+Dan asked whether feeding 5 V into CON2 without battery power could damage
+U1. Back-feed tolerance has **not** been established. If CON2 pin 1 is tied
+to V1, external power there could back-feed U1's regulator; do not use it as
+a power input. Use the identified VBAT input and treat CON2 pin 1 only as a
+possible target-voltage reference after tracing it. Never join an enabled
+probe power output to that rail.
 
 ## CON2: 5-pin header and test points
 
@@ -87,17 +110,47 @@ designed. Do not back-feed 5 V into the debug header instead.
 
 - Unpopulated 5-hole through-hole header `CON2` with pin 1 marked by the
   triangle at `TP5`; test points `TP6` and others nearby.
-- Measured: pin 1 goes to a capacitor (likely VCC), pin 3 is GND. That fits
-  the common 5-pin SWD order `1 VCC, 2 SWDIO, 3 GND, 4 SWCLK, 5 RESET`
-  (the odd pins of the 10-pin Cortex header), but no single 5-pin standard
-  exists. Confirm by
-  continuity to U2: on the 48-pin SAM C21/D21 package, RESETN is pin 40,
-  PA30/SWCLK pin 45, PA31/SWDIO pin 46 (check the C21 datasheet).
-- The probe must handle 5 V I/O (J-Link, Atmel-ICE), or use a level shifter.
-  A 3.3 V-only probe such as a bare Pico can be damaged.
-- Automotive firmware is usually read-protected (security bit set), so a dump
-  may not be possible. Never mass-erase: a chip-erase clears the protection
-  but also wipes the firmware and bricks the panel.
+- Measured: pin 3 is ground; pin 1 (the top pin in Dan's description) connects
+  to a capacitor. A capacitor connection alone does not prove VCC.
+- This is a candidate SWD port, not a confirmed UART/COM port. The proposed
+  assignment below is **not a standard pinout or a ready-to-connect cable**;
+  the earlier “odd pins of the 10-pin Cortex header” claim was incorrect.
+
+| CON2 pin | Evidence / candidate function | Remaining check |
+|---|---|---|
+| 1 | Capacitor connection measured; supply/reference suspected | Trace to U1 V1 / MCU supply, then measure powered voltage |
+| 2 | SWDIO proposed, not measured | Continuity to U2 pin 46 / PA31 |
+| 3 | Ground measured | Use as probe ground after verifying orientation |
+| 4 | SWCLK proposed, not measured | Continuity to U2 pin 45 / PA30 |
+| 5 | RESET proposed, not measured | Continuity to U2 pin 40 / RESET |
+
+### Probe options and firmware status
+
+- **Available hardware:** Dan has STM32 Blue Pill boards and other dev
+  boards; exact chips/revisions and probe firmware have not been selected.
+- [Black Magic's supported-hardware documentation](https://black-magic.org/docs/intro/hardware/)
+  includes STM32F1 Blue Pill builds. Black Magic or a suitable CMSIS-DAP
+  build were discussed as candidates; neither has been tried on this panel.
+  Probe output pins depend on the chosen build, not just the board's own
+  programming-header labels.
+- Verify the probe's I/O rating against the **measured** target voltage,
+  including reset and bidirectional SWDIO. Do not assume a bare 3.3 V board
+  or every J-Link variant supports this target. A suitable level interface
+  or probe is needed if the ratings do not match. The earlier generic
+  BSS138-module suggestion has not been validated for SWD here.
+- U1's watchdog may reset a halted MCU; its board-specific configuration is
+  unknown. A debug connection can affect execution even without flash writes.
+- **Protection state is unknown.** The Microchip datasheet's DSU section
+  describes `STATUSB.PROT` (bit 0), with external debug alias
+  `0x41002102`. Checking it was proposed, not performed. A protected part may
+  need reset/cold-plug attachment; failure to attach alone proves nothing.
+- If ordinary read access is allowed, preserve a verified original dump
+  before considering changes. No dump exists in this repo. **Never accept
+  unlock/recover/chip-erase prompts:** chip erase removes the security bit
+  by erasing flash; it does not recover its contents.
+- Dan also asked about vulnerabilities allowing a dump. That question was
+  left unresolved: no applicable bypass, silicon revision, exploit attempt,
+  firmware patch or successful extraction was established in the chat.
 
 ## What this means for the mod
 
@@ -107,17 +160,19 @@ MCU reads the buttons locally and reports them on the bus. The other wires
 are probably power, ground, wake/ignition and backlight, plus any loads the
 panel drives directly.
 
-Being on CAN, this is likely the bus access the earlier OBD attempt could not get
-past the security gateway: sniff these two pins, press Parking Safety, and
-look for the frame that changes. Replaying a frame is still riskier than
-emulating the button, so the simplest reliable tap remains across the switch
-pads on the PCB.
+The panel offers a possible direct bus observation point, unlike the earlier
+reported OBD-gateway limitation. That does not prove the relevant control
+message is available here or bypasses every gateway restriction. A proposed
+first capture is listen-only on CON1 pins 7/8 while manually pressing the
+button. Do not inject/replay frames until their ownership and semantics are
+understood. PCB-contact emulation remains a proposal, not a tested circuit.
 
 Next checks:
 
 1. On the bench: follow the Parking Safety switch pads. Do they go to a U2 pin
    or straight to a connector pin?
-2. In the car: confirm CAN (or LIN, ~12 V idle with fast dips to 0 V) on the
-   connector pins identified above.
+2. With the car stationary: confirm the reported CAN pair using the Rigol
+   scope, then determine bitrate with a listen-only capture. The older LIN
+   theory is superseded for U1/L1; no LIN line has been identified.
 3. If the button only goes to U2, the simplest tap is across the switch pads on
    the PCB (emulate the press there), rather than on the harness.
