@@ -4,10 +4,12 @@ Vehicle: 2025 Hyundai Ioniq 5 XRT (facelift, ccNC infotainment).
 
 ## Evidence and scope
 
-Updated from the teardown chat and Dan's bench observations on **2026-11-07**.
+Updated from the teardown chat and bench/probe threads through **2026-11-08**.
 Pin assignments below are reported continuity/tracing results, not a Hyundai
-service-manual pinout. No powered voltage measurements, scope traces, CAN
-captures, debugger results or automatic-disable tests were reported.
+service-manual pinout. Dan subsequently confirmed CON2 pin 1 as a 5 V
+supply/reference. Black Magic Probe responds to its host, but target SWD scans
+failed; protection is still unknown. No scope traces, CAN captures, panel
+firmware dump or automatic-disable tests were reported.
 
 The target is **Parking Safety / rear auto-braking**, not the electronic
 parking brake (EPB), Auto Hold or the gear-selector Park button. The hitch
@@ -156,14 +158,17 @@ Consequences:
 ## Equipment and open checks
 
 - Rigol scope was discussed for live waveform checks; no captures are saved.
-- Dan has STM32 Blue Pill development boards available. Probe firmware and
-  electrical compatibility have not been tested; see
+- An STM32F411 Black Pill was flashed with Black Magic Probe v2.0.0 and
+  responds to the host. Target communication failed; electrical compatibility
+  and the panel signal mapping still need validation. See
   [electronics.md](electronics.md#probe-options-and-firmware-status).
 - Finish the CON1 orientation/empty-position drawing and measure the supply,
-  wake behaviour, CAN bitrate and powered CON2 voltage.
+  wake behaviour and CAN bitrate.
 - Trace the Parking Safety switch and LED before choosing a circuit.
 - Confirm the remaining CON2 signals, then check debug protection without
   erasing or modifying the original firmware.
-- Firmware-dump vulnerabilities were raised as a question, but no result was
-  established in the chat. Protection state, silicon revision and any
-  applicable readout issue remain unverified; no dump or bypass is recorded.
+- A related SAM4C32 bypass was discussed, but no SAM C21 bypass was established.
+  Protection state, silicon revision and any applicable readout issue remain
+  unverified; no panel dump or bypass is recorded.
+- The [investigation register](investigations.md) consolidates the probe,
+  equipment and research threads without treating suggestions as test results.
