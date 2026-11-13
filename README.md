@@ -25,9 +25,11 @@ in-car voltage on pin 5 is 12.2 V released. See
 [docs/can-bench-capture.md](docs/can-bench-capture.md).
 
 In the car (2026-11-12), another module reports the feature state in
-`0x05C17002`: byte 1 = `09` auto-brake on, `07` off. A long press **toggles**
-it, so the controller must read that byte (listen-only) and press only when it
-reads `09`. See [docs/can-car-capture.md](docs/can-car-capture.md).
+`0x05C17002`: byte 1 = `09` auto-brake on, `07` off. Two routes can change it:
+emulate the pin 5 button (toggles brake **and** beep), or send command
+`0x2A3 00 02 …` as the touchscreen does (brake **only**). A long press or a
+`0x2A3` toggle flips it both ways, so act only after reading byte 1 = `09`.
+See [docs/can-car-capture.md](docs/can-car-capture.md).
 
 The proposed controller would wait after startup, confirm Parking Safety is
 on, hold the button for about 3 s (> 2 s required), and verify it turned off.

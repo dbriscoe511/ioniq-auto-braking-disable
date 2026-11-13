@@ -65,19 +65,58 @@ Dan measured **CON1 pin 5 at 12.2 V** with the car on and the button released,
 consistent with a switch input pulled up to battery voltage. The pressed
 voltage was not measured.
 
+## Infotainment setting: command `0x2A3` (11-bit)
+
+Toggling Parking Safety **off/on from the touchscreen settings menu** emits a
+command frame that the earlier button/pin-5 work never produced. Captured in
+`screen_toggle.log`.
+
+| `0x2A3` payload | Effect ~0.1 s later |
+|---|---|
+| `00 02 00 00 00 00 00 00` | auto-brake **off** (`0x05C17002` byte 1 `09` → `07`) |
+| `00 04 00 00 00 00 00 00` | auto-brake **on** (byte 1 `07` → `09`) |
+
+- Each toggle sends **three request frames ~50 ms apart, then three all-zero
+  frames**. (The ~50 ms figure is at the resolution limit of the logger.)
+- `0x2A3` appears in **no other capture** — only when the screen setting is
+  touched. It carries **no visible checksum or rolling counter**, unlike most
+  frames on this bus.
+- It moves **byte 1 only**. The warning-sound bit (`0x05C17002` byte 0) does
+  **not** change, so this command disables the brake but leaves the beep. It
+  also produces **no 2 s notice** in `0x05C17001`, unlike the button long press.
+- In `screen_toggle.log`, all 8 toggles (4 off, 4 on) matched a request within
+  ~0.1 s. The very first request also had `0F` in byte 3 (meaning unknown).
+
+**Not yet proven:** that `0x2A3` *causes* the change (timing/exclusivity make
+it very likely, but only transmitting it would confirm), and that the sender is
+the head unit (assumed, not identified).
+
 ## What this means for the mod
 
-- **Input:** close CON1 pin 5 to ground through ~200 Ω for about 3 s, in
-  parallel with the factory switch (e.g. a small N-channel MOSFET or
-  optocoupler rated well above 12 V). The worst-case current is ~60 mA
-  (12.2 V / 200 Ω); the real figure depends on the unmeasured pull-up.
-- **Feedback:** read `0x05C17002` byte 1 listen-only. Press only when it reads
-  `09`; after the press, confirm `07`; never press while it reads `07`. A blind
-  press could turn auto-brake back on.
-- **Do not transmit** these frames. `0x05C17002` is a status output from the
-  module that reads pin 5; replaying it would conflict with that module's own
-  frames and would not change its internal state.
-- A software-only change would have to be in the module that reads pin 5,
-  which has not been identified. The panel firmware (SAM C21) does not appear
-  to handle Parking Safety, though whether the pin 5 node also reaches the MCU
-  is still unchecked.
+Two independent routes now exist:
+
+1. **Pin 5 button emulation (hardware).** Close CON1 pin 5 to ground through
+   ~200 Ω for about 3 s, in parallel with the factory switch (e.g. a small
+   N-channel MOSFET or optocoupler rated well above 12 V). Worst-case current
+   ~60 mA (12.2 V / 200 Ω); the real figure depends on the unmeasured pull-up.
+   This toggles **both** brake and beep.
+2. **`0x2A3` command (CAN transmit).** After start, send `0x2A3 00 02 …` the
+   way the head unit does. Disables the **brake only** (beep untouched), needs
+   no wire to pin 5, but requires a device that transmits on this bus segment.
+   Through the OBD port it would likely still be gateway-blocked.
+
+Both are device-in-car solutions, not a software-only change. A software-only
+fix would have to live in the module that reads pin 5 and sends `0x05C17002`,
+which has not been identified. The panel firmware (SAM C21) does not appear to
+handle Parking Safety; whether the pin 5 node also reaches the MCU is unchecked.
+
+**Feedback for either route:** read `0x05C17002` byte 1 listen-only. Act only
+when it reads `09` (on); afterwards confirm `07` (off); never act while it
+already reads `07`. A long press **or** a `0x2A3 00 04` toggles it back on, so
+a blind action could re-enable the brake.
+
+**Do not replay `0x05C17002` itself.** It is a status output from the module
+that reads pin 5; replaying it conflicts with that module's own frames and does
+not change its internal state. `0x2A3` is different — it is the actual command
+input, sent only on a user action, so there is normally nothing to conflict
+with.

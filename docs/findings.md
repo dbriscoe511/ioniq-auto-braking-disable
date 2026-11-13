@@ -128,9 +128,10 @@ do not mean zero. The two unpopulated positions have not been identified.
   unmeasured. Confirm with an unpowered pin 5 to pin 16 check (open released,
   ~200 Ω pressed) first.
 - In the car, a long press **toggles** auto-brake (`0x05C17002` byte 1:
-  `09` on, `07` off) and a short press toggles the warning sound. Press only
-  when byte 1 reads `09`, then confirm `07`; never press blind. See
-  [can-car-capture.md](can-car-capture.md).
+  `09` on, `07` off) and a short press toggles the warning sound. The
+  touchscreen "off" sends CAN command **`0x2A3 00 02 …`** (brake only, beep
+  untouched); `00 04` turns it back on. Act only when byte 1 reads `09`, then
+  confirm `07`; never act blind. See [can-car-capture.md](can-car-capture.md).
 - Read the Parking Safety indicator only after verifying its polarity,
   drive waveform and relationship to the actual feature state.
 - The earlier proposal was: wait for boot, hold for ~3 s only when enabled,

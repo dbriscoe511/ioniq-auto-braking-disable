@@ -19,5 +19,7 @@ logs. Format is the same as the
 | `stage1_short.log` | 30 s | In reverse, Parking Safety short presses |
 | `stage2_long.log` | 30 s | In reverse, Parking Safety long presses |
 | `stage3_gear.log` | 30 s | Out of reverse and back in several times, muting the beep; one accidental long press |
+| `screen_toggle.log` | 60 s | Car boot, then Parking Safety toggled off/on ×5 from the touchscreen settings menu (shows command `0x2A3`) |
+| `monitor2.log` | 60 s | Idle monitor; gear change near the end, no screen toggle |
 
 An earlier 45 s baseline captured nothing (car not yet on) and was overwritten.
