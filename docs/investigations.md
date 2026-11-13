@@ -72,8 +72,9 @@ No order or successful use of this equipment on the panel was recorded.
   Pi GPIO, Pico and Arduino proposals were not tested substitutes.
 - CANable 2.0, NUCLEO-G431KB plus a transceiver, and Adafruit #5708 were
   candidates. Verify board revision, controller/transceiver capabilities,
-  firmware and host support before purchasing. Neither panel bitrate nor
-  classic-CAN/CAN-FD operation has been measured. No ready Nucleo build was
+  firmware and host support before purchasing. *(2026-11-09: a CANable 2.0 was
+  used to capture the panel at 500 kbit/s classic CAN; see
+  [can-bench-capture.md](can-bench-capture.md).)* No ready Nucleo build was
   demonstrated; estimates of porting effort were speculative.
 - The cost-conscious sequence discussed was to use the existing Rigol scope
   first, then decide whether a long-duration CAN logger is needed. No scope
@@ -93,8 +94,29 @@ No order or successful use of this equipment on the panel was recorded.
    Preserve original panel firmware; do not accept erase/unlock/recover prompts.
 4. Record scope traces, bitrate and switch/LED tracing before choosing a CAN
    adapter or button-interface circuit. Start bus observation listen-only.
+   *(2026-11-09: bitrate and Parking Safety switch traced; see the addendum.)*
 5. Keep firmware research separate from demonstrated results. The SAM4C32
    discussion does not establish a SAM C21 bypass or a need for fault injection.
+
+## Addendum: bench CAN session, 2026-11-09
+
+Recorded after this audit. The panel was powered on the bench (12 V, 0.1 A
+limit) and captured with a CANable 2.0 from `labrador-pie`; nothing was
+transmitted. It sends `0x451` every 200 ms at 500 kbit/s without the car, and
+byte 0 carries the two seat heater buttons. Parking Safety, steering wheel heat
+and camera produced no CAN change. Dan then traced the Parking Safety switch to
+CON1 pin 5 via ~200 Ω, other side to ground. Full results:
+[can-bench-capture.md](can-bench-capture.md); raw logs:
+`captures/2026-11-09-bench-can/`.
+
+## Addendum: in-car CAN session, 2026-11-12
+
+Listen-only at the panel connector, car on; nothing transmitted. The bus
+carries ~195 IDs at 500 kbit/s. Another module reports Parking Safety in
+`0x05C17002` (byte 1 `09` = auto-brake on, `07` = off; byte 0 bit 0 = warning
+sound). Long presses toggle auto-brake both ways. Pin 5 reads 12.2 V released.
+Details: [can-car-capture.md](can-car-capture.md); raw logs:
+`captures/2026-11-12-car-can/`.
 
 ## Source threads
 

@@ -4,12 +4,15 @@ Vehicle: 2025 Hyundai Ioniq 5 XRT (facelift, ccNC infotainment).
 
 ## Evidence and scope
 
-Updated from the teardown chat and bench/probe threads through **2026-11-08**.
+Updated from the teardown chat and bench/probe threads through **2026-11-12**.
 Pin assignments below are reported continuity/tracing results, not a Hyundai
 service-manual pinout. Dan subsequently confirmed CON2 pin 1 as a 5 V
 supply/reference. Black Magic Probe responds to its host, but target SWD scans
-failed; protection is still unknown. No scope traces, CAN captures, panel
-firmware dump or automatic-disable tests were reported.
+failed; protection is still unknown. On 2026-11-09 the panel's bench CAN
+traffic was captured (500 kbit/s, ID `0x451`, seat heater buttons only), and
+the Parking Safety switch was traced to CON1 pin 5; see
+[can-bench-capture.md](can-bench-capture.md).
+No scope traces, panel firmware dump or automatic-disable tests were reported.
 
 The target is **Parking Safety / rear auto-braking**, not the electronic
 parking brake (EPB), Auto Hold or the gear-selector Park button. The hitch
@@ -34,8 +37,11 @@ See [teardown.md](teardown.md) for the step-by-step guide with photos.
 - Board: `IP-678A, 3022901 VER.1.00`, with an Atmel `ATSAMC21G17A-Z…` MCU
   (U2, marking read by Dan) and an NXP
   UJA1164A CAN system basis chip (U1), plus a CAN common mode choke. See
-  [electronics.md](electronics.md). CAN hardware is present; the specific
-  Parking Safety signal path and frame are not yet traced or captured.
+  [electronics.md](electronics.md). On the bench the panel sends `0x451` at
+  500 kbit/s carrying the two seat heater buttons; Parking Safety, steering
+  wheel heat and camera produced no CAN change. Dan traced the Parking Safety
+  switch to **CON1 pin 5 via ~200 Ω**, other side to ground. See
+  [can-bench-capture.md](can-bench-capture.md).
 
 ### Interpretation
 
@@ -44,8 +50,12 @@ connector positions. The earlier conclusion that this ruled out CAN was
 incorrect: the subsequent chip identification and L1 tracing supersede it.
 Do not infer one connector wire per button or LED from that count.
 
-The MCU likely reads the buttons locally, but the remaining connector wires
-are unmapped. Older Ioniq 5 / 2024 Ioniq 6 diagrams discussed in the original
+The 2026-11-09 bench work shows the buttons are split: the seat heaters are
+reported over CAN, while Parking Safety appears to be **hardwired** to CON1
+pin 5 (switch to ground, ~200 Ω in series). Whether that node also reaches the
+MCU is unchecked. Dan reports 7 button positions on the PCB, 2 depopulated.
+The remaining connector wires are unmapped. Older Ioniq 5 / 2024 Ioniq 6
+diagrams discussed in the original
 research had `PDW SW SIG` and `PDW SW IND`; they are not a verified pinout for
 this facelift panel.
 
@@ -94,7 +104,7 @@ do not mean zero. The two unpopulated positions have not been identified.
 | 2 | | | | | |
 | 3 | | | | | |
 | 4 | | | | | |
-| 5 | | | | | |
+| 5 | | 12.2 V | | | Parking Safety switch via ~200 Ω; switch other side to ground (Dan, 2026-11-09) |
 | 6 | | | | | |
 | 7 | | | | | CAN-L (via L1) |
 | 8 | | | | | CAN-H (via L1) |
@@ -112,9 +122,18 @@ do not mean zero. The two unpopulated positions have not been identified.
 - Small MCU with a suitable supply. CON1 VBAT is not yet shown to be
   ignition-switched; do not equate panel power with the car entering READY.
   Ignition/wake detection and standby current still need measuring.
-- Emulate a closure across the PCB button contacts after tracing them. A
-  transistor-to-ground circuit is only appropriate if an active-low input is
-  confirmed; a matrix or resistor ladder needs a different interface.
+- Emulate the switch on the **CON1 pin 5 wire**: a ~200 Ω closure to ground
+  held longer than 2 s, in parallel with the factory button. The switching
+  part depends on the in-car idle voltage and current on pin 5, still
+  unmeasured. Confirm with an unpowered pin 5 to pin 16 check (open released,
+  ~200 Ω pressed) first.
+- In the car, a long press **toggles** auto-brake (`0x05C17002` byte 1:
+  `09` on, `07` off) and a short press toggles the warning sound. The
+  touchscreen "off" sends CAN command **`0x2A3 00 02 …`** (brake only, beep
+  untouched). Replaying `0x2A3` on the panel bus was tested 2026-11-12 and had
+  no effect (likely gatewayed), so pin 5 is the working route. Act only when
+  byte 1 reads `09`, then confirm `07`; never act blind. See
+  [can-car-capture.md](can-car-capture.md).
 - Read the Parking Safety indicator only after verifying its polarity,
   drive waveform and relationship to the actual feature state.
 - The earlier proposal was: wait for boot, hold for ~3 s only when enabled,
@@ -124,13 +143,13 @@ do not mean zero. The two unpopulated positions have not been identified.
 
 ## Interception options
 
-1. PCB-contact tap: current preferred investigation route if the button is
-   read locally; preserves the panel's own communication protocol.
+1. Single-wire tap on the CON1 pin 5 wire: now the leading option, since the
+   switch appears hardwired to that pin. Needs in-car voltage measurements.
 2. Plug-in pass-through adapter (both connector halves; fully reversible).
    Needs the housing part number, a donor `93310-…` switch or Hyundai repair
-   pigtail. Useful for power/CAN access, but does not create a dedicated
-   Parking Safety wire if the button is read locally.
-3. Single-wire harness tap only if tracing actually finds a dedicated signal.
+   pigtail. Gives access to pin 5 without cutting the harness.
+3. PCB-contact tap across the switch pads: electrically the same node as
+   pin 5, but requires opening the panel.
 4. Back-probe piggyback - testing only, not a permanent vibrating connection.
 
 ## Car behaviour with the panel unplugged
@@ -151,20 +170,23 @@ Consequences:
   Disappearing IDs are candidates, not proof of panel ownership: unplugging
   it can change other nodes' behaviour or bus wake state.
 - A two-interface CAN bridge or full panel replacement was discussed, not
-  built. The button frame, status feedback, counters/checksums, timing and
-  effects on the other controls remain unknown. Blind injection could
-  conflict with the real panel's messages.
+  built. It now looks unnecessary: Parking Safety did not appear on the
+  panel's bench CAN traffic and appears hardwired to CON1 pin 5. Blind
+  injection could conflict with the real panel's messages.
 
 ## Equipment and open checks
 
-- Rigol scope was discussed for live waveform checks; no captures are saved.
+- Rigol scope was discussed for live waveform checks; no scope captures are
+  saved. CAN logs from the bench session are in `captures/2026-11-09-bench-can/`.
 - An STM32F411 Black Pill was flashed with Black Magic Probe v2.0.0 and
   responds to the host. Target communication failed; electrical compatibility
   and the panel signal mapping still need validation. See
   [electronics.md](electronics.md#probe-options-and-firmware-status).
-- Finish the CON1 orientation/empty-position drawing and measure the supply,
-  wake behaviour and CAN bitrate.
-- Trace the Parking Safety switch and LED before choosing a circuit.
+- Finish the CON1 orientation/empty-position drawing and measure the supply
+  and wake behaviour. CAN bitrate measured: 500 kbit/s classic.
+- In the car: pin 5 reads 12.2 V released (2026-11-12); pressed voltage,
+  startup timing for the long press, and a "car started" signal remain.
+  Identify the module that reads pin 5 and sends `0x05C17002`.
 - Confirm the remaining CON2 signals, then check debug protection without
   erasing or modifying the original firmware.
 - A related SAM4C32 bypass was discussed, but no SAM C21 bypass was established.

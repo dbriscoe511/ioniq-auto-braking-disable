@@ -7,7 +7,7 @@ done by hand every drive.
 
 Status: **investigation / bench teardown**. No automatic-disable circuit or
 firmware modification is installed. Measurements and observations through
-**2026-11-08** are recorded below; proposed tests are not completed results.
+**2026-11-12** are recorded below; proposed tests are not completed results.
 
 > Safety: the proposed mod disables a driver-assistance feature. It must mirror
 > pressing the factory button, preserve manual controls, and avoid turning the
@@ -16,13 +16,26 @@ firmware modification is installed. Measurements and observations through
 
 ## Approach
 
-The preferred approach under investigation is to emulate a press across the
-Parking Safety button's **PCB contacts**, not assume a dedicated harness wire.
-The panel contains a SAM C21 MCU and CAN system basis chip. Button/LED traces
-and CAN messages still need mapping.
+The bench session on 2026-11-09 found the Parking Safety button appears to be
+**hardwired**: its switch connects CON1 pin 5 to ground through ~200 Ω, and
+pressing it produced no CAN change. The panel's CAN frame (`0x451`,
+500 kbit/s) carries only the two seat heater buttons. The preferred approach
+is now to emulate a press on the **pin 5 wire**, with no CAN involved. The
+in-car voltage on pin 5 is 12.2 V released. See
+[docs/can-bench-capture.md](docs/can-bench-capture.md).
+
+In the car (2026-11-12), another module reports the feature state in
+`0x05C17002`: byte 1 = `09` auto-brake on, `07` off. Two routes can change it:
+emulate the pin 5 button (toggles brake **and** beep), or send command
+`0x2A3 00 02 …` as the touchscreen does. Transmitting `0x2A3` on this bus was
+**tested 2026-11-12 and did not work** (likely gatewayed), so the pin 5
+hardware route is the working path. See
+[docs/can-car-capture.md](docs/can-car-capture.md).
 
 The proposed controller would wait after startup, confirm Parking Safety is
 on, hold the button for about 3 s (> 2 s required), and verify it turned off.
+Per Dan, a short press only silences the beep; the long hold disables
+auto-brake until the next start, so one hold per start is enough.
 LED polarity, feedback reliability and startup timing are not yet measured.
 
 Previously set aside:
@@ -37,8 +50,9 @@ Previously set aside:
 
 - Console removal worked using the Reddit method; the button assembly has
   four edge clips and a removable PCB/rubber membrane/plastic carrier.
-- `CON1`: pin 1 = VBAT via D1/D2, pin 7 = CAN-L, pin 8 = CAN-H,
-  pin 16 = ground, as reported from bench tracing. Connector orientation
+- `CON1`: pin 1 = VBAT via D1/D2, pin 5 = Parking Safety switch (~200 Ω,
+  switch to ground), pin 7 = CAN-L, pin 8 = CAN-H, pin 16 = ground, as
+  reported from bench tracing. Connector orientation
   still needs an annotated drawing.
 - U2 marking: `ATSAMC21G17A-Z…`; U1 marking: `NXP U1164A`.
 - `CON2`: pin 1 = 5 V supply/reference, confirmed by Dan; pin 3 = ground.
@@ -48,7 +62,10 @@ Previously set aside:
   checked in that state.
 - An STM32F411 Black Pill now runs Black Magic Probe v2.0.0. It responds to
   the host, but target SWD scans failed; MCU protection remains unknown.
-  No panel firmware dump or CAN capture is recorded.
+  No panel firmware dump is recorded.
+- Bench CAN capture (2026-11-09): panel sends `0x451` every 200 ms at
+  500 kbit/s without the car; byte 0 carries driver/passenger seat heat.
+  Parking Safety, wheel heat and camera did not appear.
 
 ## Findings
 
@@ -57,6 +74,10 @@ Previously set aside:
   [r/Ioniq5 MagSafe install post](https://www.reddit.com/r/Ioniq5/comments/1t76ayr/built_in_magsafe_phone_charger_without_exposed/).
 - [Electronics](docs/electronics.md): chip markings, bench power, measured vs
   tentative debug-header pinout, Blue Pill options and firmware questions.
+- [Bench CAN capture](docs/can-bench-capture.md): bitrate, `0x451` layout,
+  silent buttons, and the Parking Safety pin 5 trace.
+- [In-car CAN capture](docs/can-car-capture.md): Parking Safety status frame,
+  long-press toggle behaviour, pin 5 voltage and the resulting controller logic.
 - [Findings](docs/findings.md): dated observations, connector pin table,
   unplugged-module behaviour, circuit ideas and remaining checks.
 - [Investigation register](docs/investigations.md): cross-thread results,
@@ -65,5 +86,6 @@ Previously set aside:
 ## Layout
 
 - `docs/` - guides and notes
+- `captures/` - raw CAN logs and capture scripts
 - `photos/teardown/` - disassembly photos
 - `photos/electronics/` - PCB and chip photos
