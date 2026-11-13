@@ -28,17 +28,16 @@ Everything else uses stock KiCad symbols (LM7805_TO220, SMAJ18A, 1N5819,
 | GPIO5 | CAN Pal SLNT (no resistor on the CAN Pal itself). 4.7k pull-up keeps the transceiver silent; firmware drives it high by default |
 | GPIO6 | CAN Pal TX (transmit possible, but off by default) |
 | GPIO7 | CAN Pal RX |
-| GPIO10 | Button press drive (1k to 2N3904 base, 10k base pull-down) |
+| GPIO10 | Button press drive on CON1-5 (1k to 2N3904 base, 10k base pull-down) |
 | GPIO2/8/9 | Strapping pins (GPIO8 = LED): unused |
 | GPIO20/21 | UART0, kept free for serial debug |
 
 ## Assumptions to verify before building
 
-- **BTN line.** The schematic calls it the Parking Safety button line, the
-  "pin 5 wire" from the design chat. Its actual CON1 pin or PCB pad is not
-  verified, and the panel MCU may read the switch locally. The R3/R4/R5
-  values assume BTN idles near VBAT (12 to 14.4 V) and is pulled to ~0 V when
-  pressed.
+- **BTN line = CON1 pin 5.** The Parking Safety switch is hardwired there
+  (~200 ohms in series, other side to ground; not read by the panel MCU) and
+  pin 5 idles at 12.2 V in the car. See docs/findings.md. The pressed voltage
+  and current are still unmeasured; R3 = 200 ohms mirrors the factory switch path.
 - **Regulator:** LM7805 (stock symbol) instead of the LM2940 from the design
   chat. It has no reverse-battery protection, but the tap is behind the
   panel's D1/D2. Its 35 V max input sits above the SMAJ18A clamp (~29 V).
