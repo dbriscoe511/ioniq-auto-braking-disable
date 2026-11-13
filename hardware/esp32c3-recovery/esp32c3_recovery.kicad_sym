@@ -55,7 +55,7 @@
 				)
 			)
 		)
-		(property "Description" "ESP32-C3 SuperMini module (USB-C, onboard 3.3 V LDO, LED on GPIO8). Pin numbers = header positions, left 1-8 then right 1-8; verify against the board silkscreen."
+		(property "Description" "ESP32-C3 SuperMini module (USB-C, onboard 3.3 V LDO, LED on GPIO8). Pin numbers = header positions: left header 1-8, right header 9-16; verify against the board silkscreen."
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -435,7 +435,7 @@
 				)
 			)
 		)
-		(property "Description" "Adafruit CAN Pal CAN transceiver breakout (TJA1051T/3), Adafruit 5708 / DigiKey 1528-5708-ND. Vcc 3-5 V (onboard 5 V boost for the transceiver). SLNT high = silent (no transmit). 120R termination via onboard switch. Pin numbers are symbol-only."
+		(property "Description" "Adafruit CAN Pal CAN transceiver breakout (TJA1051T/3), Adafruit 5708 / DigiKey 1528-5708-ND. Vcc 3-5 V (onboard 5 V boost for the transceiver). SLNT high = silent (no transmit). 120R termination via onboard switch. Pin numbers = header JP2 (Adafruit schematic): 1 CAN_L, 2 CAN_H, 3 S, 4 TX, 5 RX, 6 GND, 7 VCC. SLNT goes straight to the TJA1051 S pin (no board resistor)."
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -481,7 +481,7 @@
 						)
 					)
 				)
-				(number "1"
+				(number "7"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -499,7 +499,7 @@
 						)
 					)
 				)
-				(number "2"
+				(number "6"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -517,7 +517,7 @@
 						)
 					)
 				)
-				(number "5"
+				(number "3"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -535,7 +535,7 @@
 						)
 					)
 				)
-				(number "3"
+				(number "4"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -553,7 +553,7 @@
 						)
 					)
 				)
-				(number "4"
+				(number "5"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -571,7 +571,7 @@
 						)
 					)
 				)
-				(number "6"
+				(number "2"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -589,7 +589,7 @@
 						)
 					)
 				)
-				(number "7"
+				(number "1"
 					(effects
 						(font
 							(size 1.27 1.27)

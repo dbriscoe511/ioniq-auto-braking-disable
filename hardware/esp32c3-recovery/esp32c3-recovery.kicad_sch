@@ -1686,7 +1686,7 @@
 					)
 				)
 			)
-			(property "Description" "Adafruit CAN Pal CAN transceiver breakout (TJA1051T/3), Adafruit 5708 / DigiKey 1528-5708-ND. Vcc 3-5 V (onboard 5 V boost for the transceiver). SLNT high = silent (no transmit). 120R termination via onboard switch. Pin numbers are symbol-only."
+			(property "Description" "Adafruit CAN Pal CAN transceiver breakout (TJA1051T/3), Adafruit 5708 / DigiKey 1528-5708-ND. Vcc 3-5 V (onboard 5 V boost for the transceiver). SLNT high = silent (no transmit). 120R termination via onboard switch. Pin numbers = header JP2 (Adafruit schematic): 1 CAN_L, 2 CAN_H, 3 S, 4 TX, 5 RX, 6 GND, 7 VCC. SLNT goes straight to the TJA1051 S pin (no board resistor)."
 				(at 0 0 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -1732,7 +1732,7 @@
 							)
 						)
 					)
-					(number "1"
+					(number "7"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1750,7 +1750,7 @@
 							)
 						)
 					)
-					(number "2"
+					(number "6"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1768,7 +1768,7 @@
 							)
 						)
 					)
-					(number "5"
+					(number "3"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1786,7 +1786,7 @@
 							)
 						)
 					)
-					(number "3"
+					(number "4"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1804,7 +1804,7 @@
 							)
 						)
 					)
-					(number "4"
+					(number "5"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1822,7 +1822,7 @@
 							)
 						)
 					)
-					(number "6"
+					(number "2"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1840,7 +1840,7 @@
 							)
 						)
 					)
-					(number "7"
+					(number "1"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1904,7 +1904,7 @@
 					)
 				)
 			)
-			(property "Description" "ESP32-C3 SuperMini module (USB-C, onboard 3.3 V LDO, LED on GPIO8). Pin numbers = header positions, left 1-8 then right 1-8; verify against the board silkscreen."
+			(property "Description" "ESP32-C3 SuperMini module (USB-C, onboard 3.3 V LDO, LED on GPIO8). Pin numbers = header positions: left header 1-8, right header 9-16; verify against the board silkscreen."
 				(at 0 0 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -3712,7 +3712,7 @@
 		)
 		(uuid "90943cf2-a23b-5e47-a2be-5ca3ab10706a")
 	)
-	(text_box "2. Listen-only by default, transmit-capable: R6 holds SLNT high (TJA1051 transmitter off) through boot/reset; firmware keeps GPIO5 high and runs TWAI listen-only. Transmitting needs GPIO5 low AND TWAI normal mode. Hardware lock: cut GPIO5-SLNT. Check the CAN Pal has no SLNT pull-down fighting R6.\n3. Set the CAN Pal 120R termination switch OFF: the car bus is already terminated.\n4. ESP32-C3 TWAI is classic CAN only; confirm the panel bus carries no CAN FD frames."
+	(text_box "2. Listen-only by default, transmit-capable: R6 holds SLNT high (TJA1051 transmitter off) through boot/reset; firmware keeps GPIO5 high and runs TWAI listen-only. Transmitting needs GPIO5 low AND TWAI normal mode. Hardware lock: cut GPIO5-SLNT. (CAN Pal SLNT has no board resistor; TJA1051 S has a weak pull-down.)\n3. Set the CAN Pal 120R termination switch OFF: the car bus is already terminated.\n4. ESP32-C3 TWAI is classic CAN only; confirm the panel bus carries no CAN FD frames."
 		(exclude_from_sim no)
 		(at 96.52 138.43 0)
 		(size 78.74 21.59)
@@ -4569,7 +4569,7 @@
 				)
 			)
 		)
-		(property "Description" "ESP32-C3 SuperMini module (USB-C, onboard 3.3 V LDO, LED on GPIO8). Pin numbers = header positions, left 1-8 then right 1-8; verify against the board silkscreen."
+		(property "Description" "ESP32-C3 SuperMini module (USB-C, onboard 3.3 V LDO, LED on GPIO8). Pin numbers = header positions: left header 1-8, right header 9-16; verify against the board silkscreen."
 			(at 195.58 68.58 0)
 			(hide yes)
 			(effects

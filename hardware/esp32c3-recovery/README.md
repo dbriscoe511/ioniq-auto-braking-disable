@@ -25,7 +25,7 @@ Everything else uses stock KiCad symbols (LM7805_TO220, SMAJ18A, 1N5819,
 | GPIO | Use |
 |---|---|
 | GPIO3 (ADC) | Press sense: BTN through 100k/27k divider, ~1 V threshold |
-| GPIO5 | CAN Pal SLNT. 4.7k pull-up keeps the transceiver silent; firmware drives it high by default |
+| GPIO5 | CAN Pal SLNT (no resistor on the CAN Pal itself). 4.7k pull-up keeps the transceiver silent; firmware drives it high by default |
 | GPIO6 | CAN Pal TX (transmit possible, but off by default) |
 | GPIO7 | CAN Pal RX |
 | GPIO10 | Button press drive (1k to 2N3904 base, 10k base pull-down) |
@@ -45,8 +45,9 @@ Everything else uses stock KiCad symbols (LM7805_TO220, SMAJ18A, 1N5819,
 - **Parts added after the design review:** F1 PTC fuse, which limits fault
   current if the TVS fails short. D2 Schottky, which stops USB 5 V from
   back-feeding the regulator.
-- **CAN Pal:** termination switch OFF. Check that nothing on the board pulls
-  SLNT low against R6.
+- **CAN Pal:** termination switch OFF. Symbol pin numbers follow its header
+  JP2 from Adafruit's schematic (1 CAN_L, 2 CAN_H, 3 S, 4 TX, 5 RX, 6 GND,
+  7 VCC).
 - **SuperMini pin numbers** follow the common header order (left 5V, GND,
   3V3, GPIO4..0; right GPIO5..10, 20, 21). Check them against your board's
   silkscreen.

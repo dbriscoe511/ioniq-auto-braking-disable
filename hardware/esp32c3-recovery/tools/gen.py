@@ -112,26 +112,26 @@ def supermini_symbol():
         "ESP32-C3_SuperMini", "U",
         "ESP32-C3 SuperMini",
         "ESP32-C3 SuperMini module (USB-C, onboard 3.3 V LDO, LED on GPIO8). "
-        "Pin numbers = header positions, left 1-8 then right 1-8; verify against the board silkscreen.",
+        "Pin numbers = header positions: left header 1-8, right header 9-16; verify against the board silkscreen.",
         "ESP32 ESP32-C3 SuperMini module WiFi BLE RISC-V",
         _rect(-17.78, 12.7, 17.78, -15.24), pins, (-17.78, 15.24), (2.54, -17.78))
 
 
 def canpal_symbol():
     pins = [
-        _pin("power_in", 0, 15.24, 270, "Vcc", "1"),
-        _pin("power_in", 0, -15.24, 90, "GND", "2"),
-        _pin("input", -15.24, 2.54, 0, "SLNT", "5"),
-        _pin("input", -15.24, 0, 0, "TX", "3"),
-        _pin("output", -15.24, -2.54, 0, "RX", "4"),
-        _pin("bidirectional", 15.24, 2.54, 180, "CANH", "6"),
-        _pin("bidirectional", 15.24, 0, 180, "CANL", "7"),
+        _pin("power_in", 0, 15.24, 270, "Vcc", "7"),
+        _pin("power_in", 0, -15.24, 90, "GND", "6"),
+        _pin("input", -15.24, 2.54, 0, "SLNT", "3"),
+        _pin("input", -15.24, 0, 0, "TX", "4"),
+        _pin("output", -15.24, -2.54, 0, "RX", "5"),
+        _pin("bidirectional", 15.24, 2.54, 180, "CANH", "2"),
+        _pin("bidirectional", 15.24, 0, 180, "CANL", "1"),
     ]
     return _custom(
         "Adafruit_CAN_Pal", "U", "Adafruit CAN Pal",
         "Adafruit CAN Pal CAN transceiver breakout (TJA1051T/3), Adafruit 5708 / DigiKey 1528-5708-ND. "
         "Vcc 3-5 V (onboard 5 V boost for the transceiver). SLNT high = silent (no transmit). "
-        "120R termination via onboard switch. Pin numbers are symbol-only.",
+        "120R termination via onboard switch. Pin numbers = header JP2 (Adafruit schematic): 1 CAN_L, 2 CAN_H, 3 S, 4 TX, 5 RX, 6 GND, 7 VCC. SLNT goes straight to the TJA1051 S pin (no board resistor).",
         "CAN transceiver TJA1051 breakout Adafruit",
         _rect(-10.16, 10.16, 10.16, -10.16), pins, (2.54, 12.7), (2.54, -12.7),
         ds="https://learn.adafruit.com/adafruit-can-pal")
@@ -412,21 +412,21 @@ def build():
     # ---------------- CAN -------------------------------------------------
     gp7 = U2["11"]
     CX = 251.46
-    U3 = s.place_by_pin(f"{L}:Adafruit_CAN_Pal", "U3", "Adafruit CAN Pal", "4", (CX - 15.24, gp7[1]),
+    U3 = s.place_by_pin(f"{L}:Adafruit_CAN_Pal", "U3", "Adafruit CAN Pal", "5", (CX - 15.24, gp7[1]),
                         ref_at=(7.62, -12.7), val_at=(10.16, 12.7),
                         fields={"Description": "Adafruit 5708 / DigiKey 1528-5708-ND, TJA1051T/3"})
-    s.wire(gp7, U3["4"])           # RX  -> GPIO7
-    s.wire(U2["9"], U3["5"])       # GPIO5 -> SLNT
-    s.wire(U2["10"], U3["3"])      # GPIO6 -> TX
-    sl, vcc = U3["5"], U3["1"]
+    s.wire(gp7, U3["5"])           # RX  -> GPIO7
+    s.wire(U2["9"], U3["3"])       # GPIO5 -> SLNT
+    s.wire(U2["10"], U3["4"])      # GPIO6 -> TX
+    sl, vcc = U3["3"], U3["7"]
     rx = 231.14
     R6 = s.place_by_pin("Device:R", "R6", "4.7k", "2", (rx, sl[1]),
                         ref_at=(2.54, -1.27), val_at=(2.54, 1.27), just="left",
                         fields={"Description": "SLNT pull-up: transceiver silent unless firmware drives GPIO5 low"})
     s.wire(R6["1"], (rx, vcc[1] - 2.54), (vcc[0], vcc[1] - 2.54), vcc)
     s.power("power:+3V3", vcc[0], vcc[1] - 2.54)
-    s.power("power:GND", *U3["2"])
-    for pin, name in (("6", "CANH"), ("7", "CANL")):
+    s.power("power:GND", *U3["6"])
+    for pin, name in (("2", "CANH"), ("1", "CANL")):
         p = U3[pin]
         s.wire(p, (p[0] + 7.62, p[1]))
         s.label(name, (p[0] + 7.62, p[1]))
@@ -466,7 +466,7 @@ def build():
     s.note("2. Listen-only by default, transmit-capable: R6 holds SLNT high (TJA1051 transmitter "
            "off) through boot/reset; firmware keeps GPIO5 high and runs TWAI listen-only. "
            "Transmitting needs GPIO5 low AND TWAI normal mode. Hardware lock: cut GPIO5-SLNT. "
-           "Check the CAN Pal has no SLNT pull-down fighting R6.\n"
+           "(CAN Pal SLNT has no board resistor; TJA1051 S has a weak pull-down.)\n"
            "3. Set the CAN Pal 120R termination switch OFF: the car bus is already terminated.\n"
            "4. ESP32-C3 TWAI is classic CAN only; confirm the panel bus carries no CAN FD frames.",
            96.52, 138.43, 78.74, 21.59)
