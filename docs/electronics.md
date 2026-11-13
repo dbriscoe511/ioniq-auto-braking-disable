@@ -180,7 +180,8 @@ Next checks:
 
 1. On the bench, unpowered: pin 5 to pin 16 released vs pressed (expect open
    vs ~200 Ω), and whether the pin 5 node also reaches a U2 pin.
-2. In the car: pin 5 voltage with ignition on, released and pressed, to size
-   the switching circuit.
-3. In the car: listen-only capture at the panel with ignition on, to see
-   whether `0x451` or the silent buttons behave differently.
+2. In the car: pin 5 pressed voltage (released is 12.2 V, measured
+   2026-11-12), to size the switching circuit.
+3. Done 2026-11-12: listen-only in-car capture. Parking Safety state is
+   reported by another module in `0x05C17002`; see
+   [can-car-capture.md](can-car-capture.md).

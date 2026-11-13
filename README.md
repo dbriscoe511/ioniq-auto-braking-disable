@@ -7,7 +7,7 @@ done by hand every drive.
 
 Status: **investigation / bench teardown**. No automatic-disable circuit or
 firmware modification is installed. Measurements and observations through
-**2026-11-09** are recorded below; proposed tests are not completed results.
+**2026-11-12** are recorded below; proposed tests are not completed results.
 
 > Safety: the proposed mod disables a driver-assistance feature. It must mirror
 > pressing the factory button, preserve manual controls, and avoid turning the
@@ -21,8 +21,13 @@ The bench session on 2026-11-09 found the Parking Safety button appears to be
 pressing it produced no CAN change. The panel's CAN frame (`0x451`,
 500 kbit/s) carries only the two seat heater buttons. The preferred approach
 is now to emulate a press on the **pin 5 wire**, with no CAN involved. The
-in-car voltage on pin 5 still needs measuring. See
+in-car voltage on pin 5 is 12.2 V released. See
 [docs/can-bench-capture.md](docs/can-bench-capture.md).
+
+In the car (2026-11-12), another module reports the feature state in
+`0x05C17002`: byte 1 = `09` auto-brake on, `07` off. A long press **toggles**
+it, so the controller must read that byte (listen-only) and press only when it
+reads `09`. See [docs/can-car-capture.md](docs/can-car-capture.md).
 
 The proposed controller would wait after startup, confirm Parking Safety is
 on, hold the button for about 3 s (> 2 s required), and verify it turned off.
@@ -68,6 +73,8 @@ Previously set aside:
   tentative debug-header pinout, Blue Pill options and firmware questions.
 - [Bench CAN capture](docs/can-bench-capture.md): bitrate, `0x451` layout,
   silent buttons, and the Parking Safety pin 5 trace.
+- [In-car CAN capture](docs/can-car-capture.md): Parking Safety status frame,
+  long-press toggle behaviour, pin 5 voltage and the resulting controller logic.
 - [Findings](docs/findings.md): dated observations, connector pin table,
   unplugged-module behaviour, circuit ideas and remaining checks.
 - [Investigation register](docs/investigations.md): cross-thread results,

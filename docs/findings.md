@@ -4,7 +4,7 @@ Vehicle: 2025 Hyundai Ioniq 5 XRT (facelift, ccNC infotainment).
 
 ## Evidence and scope
 
-Updated from the teardown chat and bench/probe threads through **2026-11-09**.
+Updated from the teardown chat and bench/probe threads through **2026-11-12**.
 Pin assignments below are reported continuity/tracing results, not a Hyundai
 service-manual pinout. Dan subsequently confirmed CON2 pin 1 as a 5 V
 supply/reference. Black Magic Probe responds to its host, but target SWD scans
@@ -104,7 +104,7 @@ do not mean zero. The two unpopulated positions have not been identified.
 | 2 | | | | | |
 | 3 | | | | | |
 | 4 | | | | | |
-| 5 | | | | | Parking Safety switch via ~200 Ω; switch other side to ground (Dan, 2026-11-09) |
+| 5 | | 12.2 V | | | Parking Safety switch via ~200 Ω; switch other side to ground (Dan, 2026-11-09) |
 | 6 | | | | | |
 | 7 | | | | | CAN-L (via L1) |
 | 8 | | | | | CAN-H (via L1) |
@@ -127,9 +127,10 @@ do not mean zero. The two unpopulated positions have not been identified.
   part depends on the in-car idle voltage and current on pin 5, still
   unmeasured. Confirm with an unpowered pin 5 to pin 16 check (open released,
   ~200 Ω pressed) first.
-- Per Dan, a short press only silences the beep (re-enabled when parking
-  assist activates); a hold of 2 s or more disables auto-brake until the next
-  start. One long hold per start is therefore enough.
+- In the car, a long press **toggles** auto-brake (`0x05C17002` byte 1:
+  `09` on, `07` off) and a short press toggles the warning sound. Press only
+  when byte 1 reads `09`, then confirm `07`; never press blind. See
+  [can-car-capture.md](can-car-capture.md).
 - Read the Parking Safety indicator only after verifying its polarity,
   drive waveform and relationship to the actual feature state.
 - The earlier proposal was: wait for boot, hold for ~3 s only when enabled,
@@ -180,8 +181,9 @@ Consequences:
   [electronics.md](electronics.md#probe-options-and-firmware-status).
 - Finish the CON1 orientation/empty-position drawing and measure the supply
   and wake behaviour. CAN bitrate measured: 500 kbit/s classic.
-- In the car: pin 5 voltage released/pressed with ignition on, startup timing
-  for the long press, and a "car started" signal. Trace the Parking Safety LED.
+- In the car: pin 5 reads 12.2 V released (2026-11-12); pressed voltage,
+  startup timing for the long press, and a "car started" signal remain.
+  Identify the module that reads pin 5 and sends `0x05C17002`.
 - Confirm the remaining CON2 signals, then check debug protection without
   erasing or modifying the original firmware.
 - A related SAM4C32 bypass was discussed, but no SAM C21 bypass was established.

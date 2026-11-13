@@ -109,6 +109,15 @@ CON1 pin 5 via ~200 Ω, other side to ground. Full results:
 [can-bench-capture.md](can-bench-capture.md); raw logs:
 `captures/2026-11-09-bench-can/`.
 
+## Addendum: in-car CAN session, 2026-11-12
+
+Listen-only at the panel connector, car on; nothing transmitted. The bus
+carries ~195 IDs at 500 kbit/s. Another module reports Parking Safety in
+`0x05C17002` (byte 1 `09` = auto-brake on, `07` = off; byte 0 bit 0 = warning
+sound). Long presses toggle auto-brake both ways. Pin 5 reads 12.2 V released.
+Details: [can-car-capture.md](can-car-capture.md); raw logs:
+`captures/2026-11-12-car-can/`.
+
 ## Source threads
 
 These T3 links preserve provenance for readers with access; the repository
