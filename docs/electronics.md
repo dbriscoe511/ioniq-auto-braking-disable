@@ -75,9 +75,10 @@ HN65150   (low confidence)
 - `L1` has four pads and is marked `110`. Its identification as a TDK
   ACT1210-110 was an earlier candidate, not a confirmed exact part number.
   Dan's tracing connects it to the reported CAN pair on CON1.
-- **The panel has CAN hardware.** Its specific Parking Safety message has
-  not been captured, and a separate button wire has not been ruled out by
-  tracing the button itself.
+- **The panel has CAN hardware.** On the bench it sends `0x451` at
+  500 kbit/s carrying the seat heater buttons. The Parking Safety button
+  produced no CAN change and traces to CON1 pin 5; see
+  [can-bench-capture.md](can-bench-capture.md).
 
 Reported connector mapping (bench, unplugged):
 
@@ -93,8 +94,10 @@ The connector-face orientation still needs documenting; see
 
 Proposed bench setup: panel disconnected from the vehicle, current-limited
 12 V supply to **CON1 pin 1**, return to **CON1 pin 16**, initially around
-100 mA limit. Dan later reported the panel powered and its 5 V reference good;
-the input setup and current draw were not recorded. Verify polarity/numbering
+100 mA limit. Dan later reported the panel powered and its 5 V reference good.
+On 2026-11-09 the panel ran from a DP932E at 12.00 V / 0.10 A limit on CON1
+pin 1/16, drawing 10–30 mA (supply readback) without reaching the limit.
+Verify polarity/numbering
 first, then record input current and
 U1 V1 voltage. Unexpected current limiting or reset cycling
 needs investigation, not an automatic increase in the limit.
@@ -163,25 +166,21 @@ backup checksums and conflicting equipment advice that remains unvalidated.
 
 ## What this means for the mod
 
-A microcontroller on the panel, behind a CAN system basis chip, means the
-Parking Safety button probably does **not** have its own connector wire. The
-MCU reads the buttons locally and reports them on the bus. The other wires
-are probably power, ground, wake/ignition and backlight, plus any loads the
-panel drives directly.
+The earlier expectation that the MCU reads every button and reports it on
+the bus was only half right. The 2026-11-09 bench session showed the seat
+heater buttons on CAN (`0x451`), but the Parking Safety button produced no
+CAN change, and Dan traced its switch to **CON1 pin 5 via ~200 Ω**, with the
+other side to ground. Steering wheel heat and camera were also silent on CAN
+and are untraced. Details: [can-bench-capture.md](can-bench-capture.md).
 
-The panel offers a possible direct bus observation point, unlike the earlier
-reported OBD-gateway limitation. That does not prove the relevant control
-message is available here or bypasses every gateway restriction. A proposed
-first capture is listen-only on CON1 pins 7/8 while manually pressing the
-button. Do not inject/replay frames until their ownership and semantics are
-understood. PCB-contact emulation remains a proposal, not a tested circuit.
+So the mod most likely needs no CAN at all: emulate the switch on the pin 5
+wire. No frames were transmitted on the bench, and none should be injected.
 
 Next checks:
 
-1. On the bench: follow the Parking Safety switch pads. Do they go to a U2 pin
-   or straight to a connector pin?
-2. With the car stationary: confirm the reported CAN pair using the Rigol
-   scope, then determine bitrate with a listen-only capture. The older LIN
-   theory is superseded for U1/L1; no LIN line has been identified.
-3. If the button only goes to U2, the simplest tap is across the switch pads on
-   the PCB (emulate the press there), rather than on the harness.
+1. On the bench, unpowered: pin 5 to pin 16 released vs pressed (expect open
+   vs ~200 Ω), and whether the pin 5 node also reaches a U2 pin.
+2. In the car: pin 5 voltage with ignition on, released and pressed, to size
+   the switching circuit.
+3. In the car: listen-only capture at the panel with ignition on, to see
+   whether `0x451` or the silent buttons behave differently.
