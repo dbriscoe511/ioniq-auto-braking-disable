@@ -23,5 +23,6 @@ logs. Format is the same as the
 | `monitor2.log` | 60 s | Idle monitor; gear change near the end, no screen toggle |
 | `settings_screen.log` | 40 s | Sitting on the Parking Safety settings screen, not toggling (no `0x2A3`, no context frame) |
 | `send_brake.py` | — | Guarded `0x2A3` transmitter used for the transmit test (see can-car-capture.md) |
+| `send_on.py` | — | Guarded `0x2A3 00 04` (ON) transmitter for the complementary test |
 
 An earlier 45 s baseline captured nothing (car not yet on) and was overwritten.

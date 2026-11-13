@@ -100,10 +100,12 @@ then three all-zero releases, mirroring the head unit.
 
 | Frames sent (×3 + release) | Result |
 |---|---|
-| `0x2A3 00 02 00 00 00 00 00 00` | no change (byte 1 stayed `09`) |
-| `0x2A3 00 02 00 0F 00 00 00 00` (first-from-idle form) | no change (byte 1 stayed `09`) |
+| `0x2A3 00 02 00 00 00 00 00 00` (brake was on `09`) | no change (stayed `09`) |
+| `0x2A3 00 02 00 0F 00 00 00 00` first-from-idle form (brake on `09`) | no change (stayed `09`) |
+| `0x2A3 00 04 00 00 00 00 00 00` ON, after a manual button-off (brake off `07`) | no change (stayed `07`) |
 
-The frames were ACKed (normal mode completed cleanly; an un-ACKed frame would
+Both directions were tried: off-while-on and on-while-off. All ignored. The
+frames were ACKed (normal mode completed cleanly; an un-ACKed frame would
 have jammed the adapter with retransmits), so they reached the bus and at least
 one ECU received them. **The parking module did not act.** No warning lights,
 chimes or messages appeared.
