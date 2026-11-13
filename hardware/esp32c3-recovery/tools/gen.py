@@ -103,8 +103,8 @@ def supermini_symbol():
             ("GPIO4", "4")]
     for i, (n, num) in enumerate(left):
         pins.append(_pin("bidirectional", -22.86, 5.08 - 2.54 * i, 0, n, num))
-    right = [("GPIO5", "9"), ("GPIO6", "10"), ("GPIO7", "11"), ("GPIO8/STRAP/LED", "12"),
-             ("GPIO9/STRAP/BOOT", "13"), ("GPIO10", "14"), ("GPIO20/U0RXD", "15"),
+    right = [("GPIO5", "9"), ("GPIO6", "10"), ("GPIO7", "11"), ("GPIO8/LED", "12"),
+             ("GPIO9/BOOT", "13"), ("GPIO10", "14"), ("GPIO20/U0RXD", "15"),
              ("GPIO21/U0TXD", "16")]
     for i, (n, num) in enumerate(right):
         pins.append(_pin("bidirectional", 22.86, 10.16 - 2.54 * i, 180, n, num))
@@ -366,12 +366,12 @@ def build():
     s.wire(U1["3"], (C2["1"][0], VB_Y), C2["1"])
     s.wire((C2["1"][0], VB_Y), D2["2"])
     s.power("power:PWR_FLAG", 88.9, VB_Y)
-    s.label("VBAT", (99.06, VB_Y))
+    s.label("VBAT_F", (99.06, VB_Y))
     j5 = J["5"]
     s.wire(j5, (j5[0] + 2.54, j5[1]), (j5[0] + 2.54, GND_Y), (C3["2"][0], GND_Y))
     for p in (D1["2"], C1["2"], U1["2"], C2["2"], C3["2"]):
         s.wire(p, (p[0], GND_Y))
-    s.power("power:GND", 114.3, GND_Y)
+    s.power("power:GND", 106.68, GND_Y)
     s.power("power:PWR_FLAG", 71.12, GND_Y)
     s.block("POWER: 12 V -> 5 V", 62.23, 30.48, 166.37, 77.47)
 
@@ -387,7 +387,7 @@ def build():
     s.power("power:GND", *U2["2"])
     for num in ("8", "7", "6", "4", "12", "13", "15", "16"):
         s.no_connect(f"U2.{num}")
-    s.block("MCU", 168.91, 30.48, 222.25, 95.25)
+    s.block("MCU", 168.91, 30.48, 220.98, 95.25)
 
     # ---------------- Press sense (BTN -> GPIO3) --------------------------
     SY = 106.68
@@ -419,8 +419,8 @@ def build():
     s.wire(U2["9"], U3["5"])       # GPIO5 -> SLNT
     s.wire(U2["10"], U3["3"])      # GPIO6 -> TX
     sl, vcc = U3["5"], U3["1"]
-    rx = 228.6
-    R6 = s.place_by_pin("Device:R", "R6", "10k", "2", (rx, sl[1]),
+    rx = 231.14
+    R6 = s.place_by_pin("Device:R", "R6", "4.7k", "2", (rx, sl[1]),
                         ref_at=(2.54, -1.27), val_at=(2.54, 1.27), just="left",
                         fields={"Description": "SLNT pull-up: transceiver silent unless firmware drives GPIO5 low"})
     s.wire(R6["1"], (rx, vcc[1] - 2.54), (vcc[0], vcc[1] - 2.54), vcc)
@@ -430,7 +430,7 @@ def build():
         p = U3[pin]
         s.wire(p, (p[0] + 7.62, p[1]))
         s.label(name, (p[0] + 7.62, p[1]))
-    s.block("CAN (silent by default)", 226.06, 30.48, 284.48, 82.55)
+    s.block("CAN (silent by default)", 227.33, 30.48, 284.48, 82.55)
 
     # ---------------- Button press output (GPIO10 -> NPN -> BTN) ----------
     gp10 = U2["14"]
@@ -448,36 +448,38 @@ def build():
     g = BY + 15.24
     s.wire(R2["2"], (bx, g), (Q1["1"][0], g), Q1["1"])
     s.power("power:GND", bx + 5.08, g)
-    R3 = s.place_by_pin("Device:R", "R3", "200", "2", (Q1["3"][0], BY - 10.16),
+    R3 = s.place_by_pin("Device:R", "R3", "200 1W", "2", (Q1["3"][0], BY - 10.16),
                         ref_at=(2.54, -1.27), val_at=(2.54, 1.27), just="left")
     s.wire(R3["2"], Q1["3"])
     top = (R3["1"][0], R3["1"][1] - 2.54)
     s.wire(R3["1"], top, (top[0] + 12.7, top[1]))
     s.label("BTN", (top[0] + 12.7, top[1]))
-    s.block("BUTTON PRESS OUTPUT", 226.06, 88.9, 284.48, 133.35)
+    s.block("BUTTON PRESS OUTPUT", 227.33, 88.9, 284.48, 133.35)
 
     # ---------------- Notes ----------------------------------------------
-    s.note("1. BTN = the Parking Safety button line (the \"pin 5 wire\" in the design chat). "
-           "Its CON1 pin or PCB pad is NOT verified: the panel MCU may read the switch locally "
-           "(docs/electronics.md). Trace the switch pads and measure idle/pressed voltage first. "
-           "R3/R4/R5 assume BTN idles near VBAT (12-14.4 V) and is pulled to ~0 V when pressed; "
-           "a stiff 5 V line would read ~1.06 V on GPIO3, right at the threshold.",
+    s.note("1. BTN = the Parking Safety button line (called the \"pin 5 wire\" in the design "
+           "notes; not J1 pin 5). Its CON1 pin or PCB pad is NOT verified: the panel MCU may read "
+           "the switch locally (docs/electronics.md). Trace the switch and measure idle/pressed "
+           "voltage first. R3/R4/R5 assume BTN idles near VBAT (12 to 14.4 V) and is pulled to "
+           "~0 V when pressed; a stiff 5 V line would read ~1.06 V on GPIO3, at the threshold.",
            15.24, 138.43, 78.74, 21.59)
-    s.note("2. TX is wired (GPIO6) so the board CAN transmit, but it is silent by default: R6 "
-           "pulls SLNT high (TJA1051 transmitter off) during boot/reset, and firmware drives "
-           "GPIO5 high and runs TWAI listen-only. It never sends unless the firmware is changed "
-           "on purpose. Hard lock: cut the GPIO5 link, tie SLNT to 3V3.\n"
+    s.note("2. Listen-only by default, transmit-capable: R6 holds SLNT high (TJA1051 transmitter "
+           "off) through boot/reset; firmware keeps GPIO5 high and runs TWAI listen-only. "
+           "Transmitting needs GPIO5 low AND TWAI normal mode. Hardware lock: cut GPIO5-SLNT. "
+           "Check the CAN Pal has no SLNT pull-down fighting R6.\n"
            "3. Set the CAN Pal 120R termination switch OFF: the car bus is already terminated.\n"
            "4. ESP32-C3 TWAI is classic CAN only; confirm the panel bus carries no CAN FD frames.",
            96.52, 138.43, 78.74, 21.59)
     s.note("6. GPIO2/8/9 are strapping pins (GPIO8 = onboard LED): leave unconnected. GPIO10 is "
            "not a strap; R2 holds Q1 off during boot. GPIO20/21 (UART0) kept free for serial debug.\n"
-           "7. VBAT is tapped on the PCB side of the panel's reverse-polarity diodes D1/D2; one "
-           "common ground with the panel (CON1-16). F1 limits fault current if D1 fails short. "
-           "D2 blocks USB 5 V back-feeding U1. LM7805: 35 V max input; SMAJ18A clamps ~29 V.",
+           "7. VBAT is tapped on the PCB side of the panel's own reverse-polarity diodes (IP-678A "
+           "D1/D2); one common ground with the panel (CON1-16). F1 limits fault current if this "
+           "sheet's D1 fails short; D2 blocks USB 5 V back-feeding U1 (+5V is ~4.6 V). LM7805: 35 V "
+           "max input, SMAJ18A clamps ~29 V; ~0.9 W at 100 mA (Wi-Fi on), add a small heatsink.",
            15.24, 162.56, 160.02, 11.43)
-    s.note("5. R3 = 200R gives 60-70 mA if BTN is a stiff 12-14 V node; raise to 470R-1k if the "
-           "measured pull-up allows. Firmware ignores GPIO3 while Q1 is on and caps press time.",
+    s.note("5. R3 = 200R dissipates up to ~1 W (60-70 mA) if BTN is a stiff 12-14 V node; use a "
+           "1 W part, or 470R-1k if the measured pull-up allows. Firmware ignores GPIO3 while Q1 "
+           "is on and caps the press time.",
            177.8, 138.43, 106.68, 10.16)
     return s
 

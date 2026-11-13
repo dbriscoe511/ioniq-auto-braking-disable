@@ -25,7 +25,7 @@ Everything else uses stock KiCad symbols (LM7805_TO220, SMAJ18A, 1N5819,
 | GPIO | Use |
 |---|---|
 | GPIO3 (ADC) | Press sense: BTN through 100k/27k divider, ~1 V threshold |
-| GPIO5 | CAN Pal SLNT. 10k pull-up keeps the transceiver silent; firmware drives it high by default |
+| GPIO5 | CAN Pal SLNT. 4.7k pull-up keeps the transceiver silent; firmware drives it high by default |
 | GPIO6 | CAN Pal TX (transmit possible, but off by default) |
 | GPIO7 | CAN Pal RX |
 | GPIO10 | Button press drive (1k to 2N3904 base, 10k base pull-down) |
