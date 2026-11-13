@@ -457,30 +457,12 @@ def build():
     s.block("BUTTON PRESS OUTPUT", 227.33, 88.9, 284.48, 133.35)
 
     # ---------------- Notes ----------------------------------------------
-    s.note("1. BTN = the Parking Safety button line (called the \"pin 5 wire\" in the design "
-           "notes; not J1 pin 5). Its CON1 pin or PCB pad is NOT verified: the panel MCU may read "
-           "the switch locally (docs/electronics.md). Trace the switch and measure idle/pressed "
-           "voltage first. R3/R4/R5 assume BTN idles near VBAT (12 to 14.4 V) and is pulled to "
-           "~0 V when pressed; a stiff 5 V line would read ~1.06 V on GPIO3, at the threshold.",
-           15.24, 138.43, 78.74, 21.59)
-    s.note("2. Listen-only by default, transmit-capable: R6 holds SLNT high (TJA1051 transmitter "
-           "off) through boot/reset; firmware keeps GPIO5 high and runs TWAI listen-only. "
-           "Transmitting needs GPIO5 low AND TWAI normal mode. Hardware lock: cut GPIO5-SLNT. "
-           "(CAN Pal SLNT has no board resistor; TJA1051 S has a weak pull-down.)\n"
-           "3. Set the CAN Pal 120R termination switch OFF: the car bus is already terminated.\n"
-           "4. ESP32-C3 TWAI is classic CAN only; confirm the panel bus carries no CAN FD frames.",
-           96.52, 138.43, 78.74, 21.59)
-    s.note("6. GPIO2/8/9 are strapping pins (GPIO8 = onboard LED): leave unconnected. GPIO10 is "
-           "not a strap; R2 holds Q1 off during boot. GPIO20/21 (UART0) kept free for serial debug.\n"
-           "7. VBAT is tapped on the PCB side of the panel's own reverse-polarity diodes (IP-678A "
-           "D1/D2); one common ground with the panel (CON1-16). F1 limits fault current if this "
-           "sheet's D1 fails short; D2 blocks USB 5 V back-feeding U1 (+5V is ~4.6 V). LM7805: 35 V "
-           "max input, SMAJ18A clamps ~29 V; ~0.9 W at 100 mA (Wi-Fi on), add a small heatsink.",
-           15.24, 162.56, 160.02, 11.43)
-    s.note("5. R3 = 200R dissipates up to ~1 W (60-70 mA) if BTN is a stiff 12-14 V node; use a "
-           "1 W part, or 470R-1k if the measured pull-up allows. Firmware ignores GPIO3 while Q1 "
-           "is on and caps the press time.",
-           177.8, 138.43, 106.68, 10.16)
+    s.note("1. BTN tap point and idle voltage are unverified; values assume ~12 V idle, "
+           "~0 V pressed.\n"
+           "2. CAN is silent by default: R6 holds SLNT high and firmware keeps it high "
+           "(listen-only). Set the CAN Pal termination switch OFF.\n"
+           "3. GPIO2/8/9 are strapping pins (GPIO8 = LED): leave unconnected.",
+           15.24, 140.97, 160.02, 11.43)
     return s
 
 
