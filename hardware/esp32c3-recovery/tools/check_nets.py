@@ -9,7 +9,7 @@ from sexp import find, findall, parse
 
 EXPECTED = {
     "VBAT_IN (tap -> fuse)": {"J1.1", "F1.1"},
-    "VBAT": {"F1.2", "D1.1", "C1.1", "U1.1"},
+    "VBAT_F": {"F1.2", "D1.1", "C1.1", "U1.1"},
     "5V_REG": {"U1.3", "C2.1", "D2.2"},
     "+5V": {"D2.1", "C3.1", "U2.1"},
     "+3V3": {"U2.3", "U3.1", "R6.1"},
