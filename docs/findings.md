@@ -130,8 +130,10 @@ do not mean zero. The two unpopulated positions have not been identified.
 - In the car, a long press **toggles** auto-brake (`0x05C17002` byte 1:
   `09` on, `07` off) and a short press toggles the warning sound. The
   touchscreen "off" sends CAN command **`0x2A3 00 02 …`** (brake only, beep
-  untouched); `00 04` turns it back on. Act only when byte 1 reads `09`, then
-  confirm `07`; never act blind. See [can-car-capture.md](can-car-capture.md).
+  untouched). Replaying `0x2A3` on the panel bus was tested 2026-11-12 and had
+  no effect (likely gatewayed), so pin 5 is the working route. Act only when
+  byte 1 reads `09`, then confirm `07`; never act blind. See
+  [can-car-capture.md](can-car-capture.md).
 - Read the Parking Safety indicator only after verifying its polarity,
   drive waveform and relationship to the actual feature state.
 - The earlier proposal was: wait for boot, hold for ~3 s only when enabled,

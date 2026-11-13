@@ -91,6 +91,39 @@ command frame that the earlier button/pin-5 work never produced. Captured in
 it very likely, but only transmitting it would confirm), and that the sender is
 the head unit (assumed, not identified).
 
+### Transmit test (2026-11-12): replay does not work from this bus
+
+First time transmitting on the car bus (car in Park, stationary, parking brake
+set). Using `captures/.../send_brake.py` (normal mode, guarded so it only sends
+when `0x05C17002` byte 1 reads `09`): three `0x2A3` request frames ~50 ms apart
+then three all-zero releases, mirroring the head unit.
+
+| Frames sent (×3 + release) | Result |
+|---|---|
+| `0x2A3 00 02 00 00 00 00 00 00` | no change (byte 1 stayed `09`) |
+| `0x2A3 00 02 00 0F 00 00 00 00` (first-from-idle form) | no change (byte 1 stayed `09`) |
+
+The frames were ACKed (normal mode completed cleanly; an un-ACKed frame would
+have jammed the adapter with retransmits), so they reached the bus and at least
+one ECU received them. **The parking module did not act.** No warning lights,
+chimes or messages appeared.
+
+Follow-up diagnostic `settings_screen.log`: sitting on the Parking Safety
+settings screen without toggling produces **no `0x2A3`** and **no new or
+changed context frame** on this bus. So the replay did not fail for lack of
+menu context.
+
+**Working hypothesis — gateway.** The panel is on a body/sub-bus. `0x2A3` and
+`0x05C17002` appear here as copies the gateway forwards, but an *unsolicited*
+`0x2A3` injected onto this bus is not routed to the parking module (which may
+live on another bus). This matches the project's earlier finding that the OBD
+route was gateway-blocked: the ADAS traffic is readable here but not
+injectable. Not proven — confirming would need access to the other bus.
+
+**Consequence:** the CAN-command route is not usable from this access point.
+Pin 5 is the route, because it drives the module's own physical input and
+bypasses CAN entirely.
+
 ## What this means for the mod
 
 Two independent routes now exist:
@@ -100,12 +133,14 @@ Two independent routes now exist:
    N-channel MOSFET or optocoupler rated well above 12 V). Worst-case current
    ~60 mA (12.2 V / 200 Ω); the real figure depends on the unmeasured pull-up.
    This toggles **both** brake and beep.
-2. **`0x2A3` command (CAN transmit).** After start, send `0x2A3 00 02 …` the
-   way the head unit does. Disables the **brake only** (beep untouched), needs
-   no wire to pin 5, but requires a device that transmits on this bus segment.
-   Through the OBD port it would likely still be gateway-blocked.
+2. **`0x2A3` command (CAN transmit).** ~~Send `0x2A3 00 02 …` as the head unit
+   does.~~ **Tested 2026-11-12 and it does not work from this bus** — two
+   faithful replays were ignored (see the transmit test above). Likely
+   gatewayed. Treat this route as closed from the panel connector unless a
+   different bus access point is found.
 
-Both are device-in-car solutions, not a software-only change. A software-only
+Route 1 (pin 5) is the working path. It is a device-in-car solution, not a
+software-only change. A software-only
 fix would have to live in the module that reads pin 5 and sends `0x05C17002`,
 which has not been identified. The panel firmware (SAM C21) does not appear to
 handle Parking Safety; whether the pin 5 node also reaches the MCU is unchecked.

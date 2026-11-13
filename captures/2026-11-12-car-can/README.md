@@ -21,5 +21,7 @@ logs. Format is the same as the
 | `stage3_gear.log` | 30 s | Out of reverse and back in several times, muting the beep; one accidental long press |
 | `screen_toggle.log` | 60 s | Car boot, then Parking Safety toggled off/on ×5 from the touchscreen settings menu (shows command `0x2A3`) |
 | `monitor2.log` | 60 s | Idle monitor; gear change near the end, no screen toggle |
+| `settings_screen.log` | 40 s | Sitting on the Parking Safety settings screen, not toggling (no `0x2A3`, no context frame) |
+| `send_brake.py` | — | Guarded `0x2A3` transmitter used for the transmit test (see can-car-capture.md) |
 
 An earlier 45 s baseline captured nothing (car not yet on) and was overwritten.
