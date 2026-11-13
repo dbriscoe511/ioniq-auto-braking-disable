@@ -7,7 +7,8 @@
 
 void wifi_ota_init(void);
 // Bring the AP up (or extend it) until now + window_ms.
-void wifi_ota_open(uint32_t now, uint32_t window_ms);
+// Returns true if the AP and the web server are both running.
+bool wifi_ota_open(uint32_t now, uint32_t window_ms);
 // Call from the control loop; closes the AP when the window has passed.
 void wifi_ota_tick(uint32_t now);
 bool wifi_ota_is_open(void);

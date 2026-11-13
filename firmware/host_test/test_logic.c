@@ -33,6 +33,7 @@ typedef struct {
     bool toggled;      // already toggled during this hold
     uint32_t toggle_after_ms;
     bool ignore_presses; // module not ready yet
+    bool on_release;     // toggle when a >= toggle_after_ms hold is released
     int toggles;
     // Dan's finger
     bool finger;
@@ -63,12 +64,18 @@ static void sim_run(sim_t *s, uint32_t *t, uint32_t end) {
         // module: long press toggles once per hold
         if (line_low && s->powered) {
             s->hold_ms++;
-            if (!s->toggled && !s->ignore_presses && s->hold_ms >= s->toggle_after_ms) {
+            if (!s->on_release && !s->toggled && !s->ignore_presses &&
+                s->hold_ms >= s->toggle_after_ms) {
                 s->b1 = (s->b1 == 0x09) ? 0x07 : (s->b1 == 0x07 ? 0x09 : s->b1);
                 s->toggled = true;
                 s->toggles++;
             }
         } else {
+            if (s->on_release && s->powered && !s->ignore_presses &&
+                s->hold_ms >= s->toggle_after_ms) {
+                s->b1 = (s->b1 == 0x09) ? 0x07 : (s->b1 == 0x07 ? 0x09 : s->b1);
+                s->toggles++;
+            }
             s->hold_ms = 0;
             s->toggled = false;
         }
@@ -217,6 +224,40 @@ static void test_slow_toggle(void) {
     s.toggle_after_ms = 2900;
     sim_run(&s, &t, 30000);
     CHECK(s.press_edges == 1 && s.b1 == 0x07, "presses=%d b1=%02x", s.press_edges, s.b1);
+}
+
+static void test_toggle_on_release(void) {
+    printf("module toggles on release (after a >= 2 s hold): one press works\n");
+    sim_t s; uint32_t t = 0;
+    sim_init(&s, t, 0x09, true);
+    s.powered = true;
+    s.on_release = true;
+    sim_run(&s, &t, 30000);
+    CHECK(s.press_edges == 1 && s.b1 == 0x07 && s.toggles == 1, "presses=%d b1=%02x toggles=%d",
+          s.press_edges, s.b1, s.toggles);
+    CHECK(s.ctl.done_reason == DONE_TURNED_OFF, "%s", ctl_done_name(s.ctl.done_reason));
+}
+
+static void test_resumed(void) {
+    printf("reset mid-drive after done (Dan re-enabled): stays latched\n");
+    sim_t s; uint32_t t = 0;
+    sim_init(&s, t, 0x09, true);
+    ctl_init_resumed(&s.ctl, t, true);
+    s.powered = true;
+    sim_run(&s, &t, 30000);
+    CHECK(s.press_edges == 0 && s.b1 == 0x09, "presses=%d", s.press_edges);
+    printf("  ...then car off/on: new drive, presses\n");
+    s.powered = false;
+    sim_run(&s, &t, t + 10000);
+    s.powered = true;
+    sim_run(&s, &t, t + 20000);
+    CHECK(s.press_edges == 1 && s.b1 == 0x07, "presses=%d b1=%02x", s.press_edges, s.b1);
+
+    printf("  ...resumed but no status ever arrives: unlatches after STATUS_GONE_MS\n");
+    ctl_t c; t = 0;
+    ctl_init_resumed(&c, t, true);
+    for (; t < STATUS_GONE_MS + 100; t += 10) ctl_step(&c, t, false, 0);
+    CHECK(c.state == ST_WAIT_STATUS, "state=%s", ctl_state_name(c.state));
 }
 
 static void test_finger_on_button(void) {
@@ -383,6 +424,8 @@ int main(int argc, char **argv) {
     test_gives_up();
     test_slow_toggle();
     test_finger_on_button();
+    test_toggle_on_release();
+    test_resumed();
     test_no_sense_fault();
     test_status_lost_while_pressing();
     test_gestures();

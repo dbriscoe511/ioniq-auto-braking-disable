@@ -58,6 +58,16 @@ void ctl_init(ctl_t *c, uint32_t now, bool enabled) {
     new_drive(c, now);
 }
 
+void ctl_init_resumed(ctl_t *c, uint32_t now, bool enabled) {
+    ctl_init(c, now, enabled);
+    c->have_status = true; // arm the "status gone" timer from now
+    c->last_rx_ms = now;
+    c->same_n = 0;
+    c->b1 = 0;
+    c->drives = 1;
+    finish(c, now, DONE_RESUMED);
+}
+
 void ctl_status_frame(ctl_t *c, uint32_t now, uint8_t b0, uint8_t b1) {
     if (c->have_status && b1 == c->b1) {
         if (c->same_n < UINT16_MAX) c->same_n++;
@@ -74,6 +84,8 @@ void ctl_status_frame(ctl_t *c, uint32_t now, uint8_t b0, uint8_t b1) {
 static bool fresh(const ctl_t *c, uint32_t now) {
     return c->have_status && ELAPSED(now, c->last_rx_ms) <= STATUS_FRESH_MS;
 }
+
+bool ctl_status_fresh(const ctl_t *c, uint32_t now) { return fresh(c, now); }
 
 static bool stable(const ctl_t *c, uint32_t now, uint8_t v) {
     return fresh(c, now) && c->b1 == v && c->same_n >= STATUS_STABLE_N;
@@ -192,6 +204,7 @@ const char *ctl_done_name(done_reason_t r) {
     case DONE_TURNED_OFF: return "turned_off";
     case DONE_GAVE_UP: return "gave_up";
     case DONE_DISABLED: return "disabled";
+    case DONE_RESUMED: return "resumed";
     }
     return "?";
 }

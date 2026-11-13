@@ -14,6 +14,7 @@
 #include "esp_adc/adc_cali_scheme.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_app_desc.h"
+#include "esp_attr.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_system.h"
@@ -48,6 +49,13 @@ static volatile int web_enable_req = -1; // -1 none, 0 off, 1 on
 static esp_timer_handle_t failsafe_timer;
 static volatile bool failsafe_tripped;
 static bool press_cur;
+
+// Survives software/watchdog/panic resets (not power loss): "done for this
+// drive", so an OTA reboot or crash mid-drive doesn't undo Dan's choice.
+#define LATCH_MAGIC 0x50534430u
+static RTC_NOINIT_ATTR uint32_t rtc_latch;
+
+static bool recovery_ok; // AP + web server came up at boot
 
 static adc_oneshot_unit_handle_t adc;
 static adc_cali_handle_t adc_cali;
@@ -221,7 +229,16 @@ static void control_task(void *arg) {
     ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
 
     uint32_t now = now_ms();
-    ctl_init(&ctl, now, load_enabled());
+    esp_reset_reason_t rr = esp_reset_reason();
+    bool soft_reset = rr == ESP_RST_SW || rr == ESP_RST_PANIC || rr == ESP_RST_INT_WDT ||
+                      rr == ESP_RST_TASK_WDT || rr == ESP_RST_WDT;
+    if (soft_reset && rtc_latch == LATCH_MAGIC) {
+        ctl_init_resumed(&ctl, now, load_enabled());
+        ESP_LOGW(TAG, "reset mid-drive after done: staying latched until status gone");
+    } else {
+        ctl_init(&ctl, now, load_enabled());
+    }
+    rtc_latch = 0;
     sense_init(&sense, now);
     gest_init(&gest);
     ESP_LOGI(TAG, "automation %s", ctl.enabled ? "enabled" : "disabled");
@@ -250,7 +267,12 @@ static void control_task(void *arg) {
 
         press_set(ctl_step(&ctl, now, btn, sense.since_ms));
 
-        switch (gest_step(&gest, now, btn, ctl_sense_masked(&ctl, now))) {
+        rtc_latch = ctl.state == ST_DONE ? LATCH_MAGIC : 0;
+
+        // Gestures only while the car is talking: pin 5 with the car off is
+        // unmeasured, and the toggle is silent and persistent.
+        bool gmask = ctl_sense_masked(&ctl, now) || !ctl_status_fresh(&ctl, now);
+        switch (gest_step(&gest, now, btn, gmask)) {
         case GEST_TOGGLE_ENABLE: set_enabled(!ctl.enabled, "button gesture"); break;
         case GEST_WIFI:
             ESP_LOGW(TAG, "Wi-Fi window opened by button gesture");
@@ -270,10 +292,16 @@ static void control_task(void *arg) {
             last_state = ctl.state;
         }
 
-        if (pending_verify && now >= MARK_VALID_AFTER_MS) {
-            esp_ota_mark_app_valid_cancel_rollback();
-            pending_verify = false;
-            ESP_LOGI(TAG, "firmware marked valid");
+        if (pending_verify && now >= MARK_VALID_AFTER_MS && !ctl.press_out) {
+            if (recovery_ok) {
+                esp_ota_mark_app_valid_cancel_rollback();
+                pending_verify = false;
+                ESP_LOGI(TAG, "firmware marked valid");
+            } else {
+                // New image can't be reached over Wi-Fi: go back to the old one.
+                ESP_LOGE(TAG, "recovery AP failed on a new image: rolling back");
+                esp_ota_mark_app_invalid_rollback_and_reboot();
+            }
         }
 
         twai_status_info_t ts = {0};
@@ -313,7 +341,8 @@ void app_main(void) {
     wifi_ota_init();
     // Recovery path that does not depend on the button/ADC code: the AP is
     // up for a minute after every power-on.
-    wifi_ota_open(now_ms(), WIFI_BOOT_WINDOW_MS);
+    recovery_ok = wifi_ota_open(now_ms(), WIFI_BOOT_WINDOW_MS);
+    if (!recovery_ok) ESP_LOGE(TAG, "Wi-Fi recovery AP failed to start");
 
     xTaskCreate(control_task, "control", 4096, NULL, 10, NULL);
 }

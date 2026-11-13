@@ -94,9 +94,10 @@ static esp_err_t h_ota(httpd_req_t *req) {
 
     static char buf[2048];
     size_t left = req->content_len;
+    int timeouts = 0;
     while (left > 0) {
         int n = httpd_req_recv(req, buf, left < sizeof buf ? left : sizeof buf);
-        if (n == HTTPD_SOCK_ERR_TIMEOUT) continue;
+        if (n == HTTPD_SOCK_ERR_TIMEOUT && ++timeouts < 3) continue; // 10 s each
         if (n <= 0) {
             esp_ota_abort(h);
             ota_busy = false;
@@ -109,6 +110,7 @@ static esp_err_t h_ota(httpd_req_t *req) {
             return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
         }
         left -= n;
+        timeouts = 0;
     }
     err = esp_ota_end(h); // validates the image
     if (err == ESP_OK) err = esp_ota_set_boot_partition(part);
@@ -120,19 +122,22 @@ static esp_err_t h_ota(httpd_req_t *req) {
     httpd_resp_sendstr(req, "OK: rebooting into the new firmware (rolls back if it "
                             "doesn't run for 30 s)\n");
     vTaskDelay(pdMS_TO_TICKS(500));
+    // Never cut a long press short: a truncated hold is a short press,
+    // which would toggle the beep.
+    for (int i = 0; i < 100 && app_pressing(); i++) vTaskDelay(pdMS_TO_TICKS(100));
     esp_restart();
     return ESP_OK;
 }
 
-static void server_start(void) {
-    if (server) return;
+static bool server_start(void) {
+    if (server) return true;
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.stack_size = 6144;
     cfg.recv_wait_timeout = 10;
     if (httpd_start(&server, &cfg) != ESP_OK) {
         server = NULL;
         ESP_LOGE(TAG, "http server failed to start");
-        return;
+        return false;
     }
     const httpd_uri_t uris[] = {
         {.uri = "/", .method = HTTP_GET, .handler = h_root},
@@ -141,7 +146,8 @@ static void server_start(void) {
         {.uri = "/ota", .method = HTTP_POST, .handler = h_ota},
     };
     for (size_t i = 0; i < sizeof uris / sizeof *uris; i++)
-        httpd_register_uri_handler(server, &uris[i]);
+        if (httpd_register_uri_handler(server, &uris[i]) != ESP_OK) return false;
+    return true;
 }
 
 static void server_stop(void) {
@@ -182,21 +188,26 @@ void wifi_ota_init(void) {
     ESP_LOGI(TAG, "AP SSID %s (http://192.168.4.1/)", (char *)ap.ap.ssid);
 }
 
-void wifi_ota_open(uint32_t now, uint32_t window_ms) {
+bool wifi_ota_open(uint32_t now, uint32_t window_ms) {
     if (!is_open) {
         if (esp_wifi_start() != ESP_OK) {
             ESP_LOGE(TAG, "wifi start failed");
-            return;
+            return false;
         }
         esp_wifi_set_max_tx_power(52); // 13 dBm: enough in the car, less heat
-        server_start();
         is_open = true;
+        if (!server_start()) {
+            esp_wifi_stop();
+            is_open = false;
+            return false;
+        }
         opened_ms = now;
         deadline_ms = now + window_ms;
         ESP_LOGI(TAG, "AP up for %" PRIu32 " s", window_ms / 1000);
     } else if ((int32_t)(now + window_ms - deadline_ms) > 0) {
         deadline_ms = now + window_ms;
     }
+    return server != NULL;
 }
 
 void wifi_ota_tick(uint32_t now) {

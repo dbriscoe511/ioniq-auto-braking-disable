@@ -34,6 +34,7 @@ typedef enum {
     DONE_TURNED_OFF,  // our press worked (0x09 -> 0x07)
     DONE_GAVE_UP,     // MAX_ATTEMPTS presses, still 0x09
     DONE_DISABLED,    // automation switched off by Dan
+    DONE_RESUMED,     // rebooted mid-drive after being done
 } done_reason_t;
 
 typedef struct {
@@ -61,6 +62,12 @@ typedef struct {
 } ctl_t;
 
 void ctl_init(ctl_t *c, uint32_t now, bool enabled);
+// After a mid-drive reset (OTA, watchdog): start latched as done, so a
+// manual re-enable is not undone. Clears like any drive once the status is
+// absent for STATUS_GONE_MS (counted from now if no frame ever arrives).
+void ctl_init_resumed(ctl_t *c, uint32_t now, bool enabled);
+// Status frame received within STATUS_FRESH_MS.
+bool ctl_status_fresh(const ctl_t *c, uint32_t now);
 // Call for every received 0x05C17002 data frame with DLC >= 2.
 void ctl_status_frame(ctl_t *c, uint32_t now, uint8_t b0, uint8_t b1);
 // Call periodically (~10 ms). btn_pressed = debounced sense state.
