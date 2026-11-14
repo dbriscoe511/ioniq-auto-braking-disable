@@ -45,6 +45,7 @@ static struct {
     bool failsafe_tripped;
 } snap;
 static volatile int web_enable_req = -1; // -1 none, 0 off, 1 on
+static volatile int web_mute_req = -1;
 
 static esp_timer_handle_t failsafe_timer;
 static volatile bool failsafe_tripped;
@@ -96,6 +97,7 @@ static void failsafe_cb(void *arg) {
 static void press_set(bool on) {
     if (on && !press_cur) {
         gpio_set_level(PIN_PRESS, 1);
+        if (ctl.beep == BEEP_PRESS) ESP_LOGI(TAG, "beep on: short press to mute");
         esp_timer_stop(failsafe_timer); // ok if not running
         ESP_ERROR_CHECK(esp_timer_start_once(failsafe_timer, HOLD_MAX_MS * 1000ULL));
         ESP_LOGI(TAG, "press");
@@ -166,23 +168,26 @@ static int sense_read_mv(void) {
 
 // ---- Settings (NVS) ---------------------------------------------------------
 
-static bool load_enabled(void) {
+static bool load_flag(const char *key) {
     nvs_handle_t h;
-    uint8_t v = 1;
+    uint8_t v = 1; // both settings default on
     if (nvs_open("psd", NVS_READONLY, &h) == ESP_OK) {
-        nvs_get_u8(h, "enabled", &v);
+        nvs_get_u8(h, key, &v);
         nvs_close(h);
     }
     return v != 0;
 }
 
-static void save_enabled(bool on) {
+static void save_flag(const char *key, bool on) {
     nvs_handle_t h;
     if (nvs_open("psd", NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_u8(h, "enabled", on);
+    nvs_set_u8(h, key, on);
     nvs_commit(h);
     nvs_close(h);
 }
+
+static bool load_enabled(void) { return load_flag("enabled"); }
+static void save_enabled(bool on) { save_flag("enabled", on); }
 
 static void set_enabled(bool on, const char *why) {
     ctl.enabled = on;
@@ -203,17 +208,20 @@ size_t app_status_json(char *buf, size_t len) {
         "\"done\":\"%s\",\"status_seen\":%s,\"b0\":\"%02X\",\"b1\":\"%02X\","
         "\"attempts\":%u,\"presses\":%" PRIu32 ",\"drives\":%" PRIu32 ","
         "\"sense_mv\":%d,\"btn_pressed\":%s,\"fault_no_sense\":%s,"
-        "\"failsafe_tripped\":%s,\"rx_frames\":%" PRIu32 ",\"rx_missed\":%" PRIu32 "}",
+        "\"failsafe_tripped\":%s,\"rx_frames\":%" PRIu32 ",\"rx_missed\":%" PRIu32 ","
+        "\"mute_beep\":%s,\"beep_on\":%s,\"beep\":\"%s\",\"beep_presses\":%" PRIu32 "}",
         d->version, s.now / 1000, s.ctl.enabled ? "true" : "false",
         ctl_state_name(s.ctl.state), ctl_done_name(s.ctl.done_reason),
         s.ctl.have_status ? "true" : "false", s.ctl.b0, s.ctl.b1, s.ctl.attempts,
         s.ctl.presses, s.ctl.drives, s.sense_mv, s.btn ? "true" : "false",
         s.ctl.fault_no_sense ? "true" : "false", s.failsafe_tripped ? "true" : "false",
-        s.rx_frames, s.rx_missed);
+        s.rx_frames, s.rx_missed, s.ctl.mute_beep ? "true" : "false",
+        (s.ctl.b0 & 1) ? "true" : "false", ctl_beep_name(s.ctl.beep), s.ctl.beep_presses);
     return n < 0 ? 0 : ((size_t)n < len ? (size_t)n : len - 1);
 }
 
 void app_request_enable(bool on) { web_enable_req = on; }
+void app_request_mute(bool on) { web_mute_req = on; }
 
 bool app_pressing(void) {
     taskENTER_CRITICAL(&lock);
@@ -239,6 +247,7 @@ static void control_task(void *arg) {
         ctl_init(&ctl, now, load_enabled());
     }
     rtc_latch = 0;
+    ctl.mute_beep = load_flag("mute");
     sense_init(&sense, now);
     gest_init(&gest);
     ESP_LOGI(TAG, "automation %s", ctl.enabled ? "enabled" : "disabled");
@@ -263,6 +272,13 @@ static void control_task(void *arg) {
         if (req >= 0) {
             web_enable_req = -1;
             set_enabled(req, "web");
+        }
+        req = web_mute_req;
+        if (req >= 0) {
+            web_mute_req = -1;
+            ctl.mute_beep = req;
+            save_flag("mute", req);
+            ESP_LOGW(TAG, "beep mute %s (web)", req ? "on" : "off");
         }
 
         press_set(ctl_step(&ctl, now, btn, sense.since_ms));

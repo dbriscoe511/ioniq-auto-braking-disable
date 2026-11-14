@@ -54,6 +54,7 @@ static void new_drive(ctl_t *c, uint32_t now) {
 void ctl_init(ctl_t *c, uint32_t now, bool enabled) {
     *c = (ctl_t){0};
     c->enabled = enabled;
+    c->mute_beep = true;
     c->release_ms = now;
     new_drive(c, now);
 }
@@ -63,12 +64,29 @@ void ctl_init_resumed(ctl_t *c, uint32_t now, bool enabled) {
     c->have_status = true; // arm the "status gone" timer from now
     c->last_rx_ms = now;
     c->same_n = 0;
+    c->b0_same_n = 0;
     c->b1 = 0;
     c->drives = 1;
     finish(c, now, DONE_RESUMED);
 }
 
 void ctl_status_frame(ctl_t *c, uint32_t now, uint8_t b0, uint8_t b1) {
+    bool beep = b0 & 1;
+    if (c->have_status && c->b0_same_n && beep == (c->b0 & 1)) {
+        if (c->b0_same_n < UINT16_MAX) c->b0_same_n++;
+    } else {
+        c->b0_same_n = 1;
+        c->beep_episode = beep;
+        c->beep_attempts = 0;
+        // Turned on right after Dan's own press: that was him, leave it.
+        // Or it came back on right after our own press (module slow to
+        // report, or two presses landed): stop, so we can't oscillate.
+        c->beep_user = beep && ((c->user_pressed &&
+                                 ELAPSED(now, c->user_press_ms) < BEEP_USER_WINDOW_MS) ||
+                                (c->beep_presses &&
+                                 ELAPSED(now, c->beep_release_ms) < BEEP_SELF_WINDOW_MS) ||
+                                c->beep == BEEP_PRESS);
+    }
     if (c->have_status && b1 == c->b1) {
         if (c->same_n < UINT16_MAX) c->same_n++;
     } else {
@@ -103,8 +121,18 @@ bool ctl_step(ctl_t *c, uint32_t now, bool btn_pressed, uint32_t btn_since_ms) {
         release(c, now);
         c->have_status = false;
         c->same_n = 0;
+        c->b0_same_n = 0;
+        c->beep_episode = false;
+        c->beep = BEEP_IDLE;
         new_drive(c, now);
     }
+
+    // Dan's own presses (ours are masked out).
+    if (btn_pressed && !ctl_sense_masked(c, now)) {
+        c->user_pressed = true;
+        c->user_press_ms = now;
+    }
+    bool btn_idle = !btn_pressed && ELAPSED(now, btn_since_ms) >= BTN_IDLE_MS;
 
     switch (c->state) {
     case ST_WAIT_STATUS:
@@ -130,8 +158,7 @@ bool ctl_step(ctl_t *c, uint32_t now, bool btn_pressed, uint32_t btn_since_ms) {
             finish(c, now, c->attempts ? DONE_TURNED_OFF : DONE_ALREADY_OFF);
         } else if (c->attempts >= MAX_ATTEMPTS) {
             finish(c, now, DONE_GAVE_UP);
-        } else if (stable(c, now, STATUS_ON) && !btn_pressed &&
-                   ELAPSED(now, btn_since_ms) >= BTN_IDLE_MS) {
+        } else if (stable(c, now, STATUS_ON) && btn_idle && c->beep == BEEP_IDLE) {
             // Fresh, stable 0x09 and nobody is touching the button.
             c->attempts++;
             c->presses++;
@@ -176,8 +203,45 @@ bool ctl_step(ctl_t *c, uint32_t now, bool btn_pressed, uint32_t btn_since_ms) {
         break;
     }
 
-    if (c->state != ST_PRESSING) release(c, now);
+    // ---- Beep mute: short press whenever the warning sound turns on ----
+    switch (c->beep) {
+    case BEEP_IDLE:
+        if (c->enabled && c->mute_beep && c->beep_episode && !c->beep_user &&
+            c->beep_attempts < BEEP_MAX_ATTEMPTS && fresh(c, now) && (c->b0 & 1) &&
+            c->b0_same_n >= BEEP_STABLE_N && c->state != ST_PRESSING && btn_idle) {
+            c->beep_attempts++;
+            c->beep_presses++;
+            c->press_out = true;
+            c->beep = BEEP_PRESS;
+            c->beep_ms = now;
+        }
+        break;
+    case BEEP_PRESS:
+        if (ELAPSED(now, c->beep_ms) >= BEEP_PRESS_MS || !fresh(c, now)) {
+            release(c, now);
+            c->beep_release_ms = now;
+            c->beep = BEEP_VERIFY;
+            c->beep_ms = now;
+        }
+        break;
+    case BEEP_VERIFY:
+        // Done once bit 0 clears; otherwise IDLE retries (attempt limit).
+        if (!c->beep_episode || ELAPSED(now, c->beep_ms) >= BEEP_VERIFY_MS)
+            c->beep = BEEP_IDLE;
+        break;
+    }
+
+    if (c->state != ST_PRESSING && c->beep != BEEP_PRESS) release(c, now);
     return c->press_out;
+}
+
+const char *ctl_beep_name(beep_state_t s) {
+    switch (s) {
+    case BEEP_IDLE: return "idle";
+    case BEEP_PRESS: return "press";
+    case BEEP_VERIFY: return "verify";
+    }
+    return "?";
 }
 
 bool ctl_sense_masked(const ctl_t *c, uint32_t now) {

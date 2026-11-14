@@ -16,4 +16,5 @@ bool wifi_ota_is_open(void);
 // Implemented in main.c, called from the HTTP server task.
 size_t app_status_json(char *buf, size_t len);
 void app_request_enable(bool on);
+void app_request_mute(bool on);
 bool app_pressing(void);

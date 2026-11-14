@@ -37,6 +37,28 @@ Not yet run on hardware.**
    or power loss. After one of those mid-drive, a manual re-enable would be
    undone once.
 
+## Reverse beep
+
+Shifting into reverse turns the parking warning sound on (`0x05C17002`
+byte 0 bit 0, `2C` → `2D`, about 0.2 s after the shift). Whenever that bit
+turns on and stays on for 2 frames, the board taps the button for 300 ms. A
+short press only toggles the beep; it never touches auto-brake. Then:
+
+- It checks the bit clears within 1.5 s, retries once, then leaves it.
+- It only taps while the bit reads on, so it can never turn the beep *on*.
+- **Your choice wins:** if your own press came within 1 s before the beep
+  turned on, it was you turning it back on, so it's left alone until it next
+  goes off. It also leaves alone a beep that comes back on within 2 s of its
+  own tap, so a slow-reporting module can't make it oscillate.
+- It waits for any long press (auto-brake) to finish first, and the button
+  must have been released for 0.5 s. Worst case is about 0.3 s after the
+  shift, or a few seconds if it happens mid long-press.
+- Runs every time, not once per drive, whenever automation is enabled and
+  "mute reverse beep" is on (web page; default on, saved in flash).
+
+**Unmeasured:** whether the module takes a 300 ms tap as a short press, and
+how quickly it reports the toggle. The captures only have Dan's own taps.
+
 It also flags `fault_no_sense` if its own press never pulls the sense line
 low (wiring problem).
 
@@ -44,7 +66,7 @@ low (wiring problem).
 
 | Gesture | Effect |
 |---|---|
-| **4 quick taps** (each ≤ 0.6 s, gaps ≤ 0.6 s) | Toggle automation on/off (saved in flash, takes effect next drive) |
+| **4 quick taps** (each ≤ 0.6 s, gaps ≤ 0.6 s) | Toggle automation on/off, including beep mute (saved in flash; auto-brake part takes effect next drive) |
 | **6 quick taps** | Open the Wi-Fi window for 5 min |
 
 Taps only count while `0x05C17002` is on the bus (car awake), since pin 5's
@@ -58,7 +80,8 @@ longer than 0.6 s cancels the sequence.
 - The AP `ps-disable-xxxx` (WPA2) is up for **60 s after every power-on**, so
   recovery doesn't depend on the gesture code. It stays up while a client is
   connected (15 min cap) and is otherwise off, which keeps the 7805 cool.
-- Page at `http://192.168.4.1/`: live status, enable/disable buttons, firmware upload.
+- Page at `http://192.168.4.1/`: live status, enable/disable automation,
+  mute/keep the reverse beep, firmware upload.
 - Upload from the command line:
   `curl --data-binary @.pio/build/supermini/firmware.bin http://192.168.4.1/ota`
 - **Rollback:** a new image has 30 s to prove itself. It is confirmed only if
@@ -80,9 +103,10 @@ host_test/run.sh                                # logic tests, no hardware
 ```
 
 `host_test/run.sh` runs `src/logic.c` against a simulated parking module
-(toggles during a 2 s hold, or on release after one) and replays every log in
-`captures/2026-11-12-car-can/`. On the replays it checks that it never presses
-on `07` or unknown values and never presses more than twice.
+(toggles auto-brake during a 2 s hold or on release after one, toggles
+the beep on a short press, optionally reporting it late) and replays every log in
+`captures/2026-11-12-car-can/`. On the replays it checks that it never long-presses on `07` or unknown
+values, never more than twice, and never short-presses while the beep bit is off.
 
 ## Pins
 

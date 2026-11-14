@@ -28,6 +28,8 @@ typedef enum {
     ST_DONE,        // nothing more until the status disappears (car off)
 } ctl_state_t;
 
+typedef enum { BEEP_IDLE, BEEP_PRESS, BEEP_VERIFY } beep_state_t;
+
 typedef enum {
     DONE_NONE,
     DONE_ALREADY_OFF, // status was 0x07 before we pressed
@@ -44,6 +46,19 @@ typedef struct {
     uint8_t b0, b1;
     uint16_t same_n; // consecutive frames with this b1
     bool seen_off;   // 0x07 seen (3+ frames) this drive: Dan's choice stands
+    uint16_t b0_same_n; // consecutive frames with this byte-0 bit 0
+
+    // beep mute
+    bool mute_beep;      // setting
+    bool beep_episode;   // bit 0 is set and this episode is still open
+    bool beep_user;      // Dan's own press turned it on: leave it
+    uint8_t beep_attempts;
+    beep_state_t beep;
+    uint32_t beep_ms;    // when the beep state was entered
+    bool user_pressed;   // Dan has pressed the button since boot
+    uint32_t user_press_ms; // last time his press was seen (not ours)
+    uint32_t beep_presses;
+    uint32_t beep_release_ms; // end of our last short press
 
     // state machine
     ctl_state_t state;
@@ -75,6 +90,7 @@ void ctl_status_frame(ctl_t *c, uint32_t now, uint8_t b0, uint8_t b1);
 bool ctl_step(ctl_t *c, uint32_t now, bool btn_pressed, uint32_t btn_since_ms);
 // True while the sense line reflects our own press (gestures must ignore it).
 bool ctl_sense_masked(const ctl_t *c, uint32_t now);
+const char *ctl_beep_name(beep_state_t s);
 const char *ctl_state_name(ctl_state_t s);
 const char *ctl_done_name(done_reason_t r);
 

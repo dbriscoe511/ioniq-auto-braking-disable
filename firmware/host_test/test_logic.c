@@ -35,6 +35,10 @@ typedef struct {
     bool ignore_presses; // module not ready yet
     bool on_release;     // toggle when a >= toggle_after_ms hold is released
     int toggles;
+    bool beep;            // byte 0 bit 0
+    uint32_t beep_lag_ms; // report a short-press toggle this much later
+    int64_t beep_pending; // when a pending toggle lands (-1 none)
+    int beep_toggles;
     // Dan's finger
     bool finger;
     // device under test
@@ -42,7 +46,9 @@ typedef struct {
     sense_t sense;
     gest_t gest;
     bool out;
-    int press_edges;
+    int press_edges;      // long presses (auto-brake)
+    int beep_edges;       // short presses (beep mute)
+    bool beep_pressed_while_off;
     int gestures[3];
     bool pressed_while_not_on; // started a press while b1 != 0x09
 } sim_t;
@@ -51,6 +57,7 @@ static void sim_init(sim_t *s, uint32_t t, uint8_t b1, bool enabled) {
     memset(s, 0, sizeof *s);
     s->b1 = b1;
     s->toggle_after_ms = 2000;
+    s->beep_pending = -1;
     ctl_init(&s->ctl, t, enabled);
     sense_init(&s->sense, t);
     gest_init(&s->gest);
@@ -71,6 +78,10 @@ static void sim_run(sim_t *s, uint32_t *t, uint32_t end) {
                 s->toggles++;
             }
         } else {
+            // short press (released before the long-press time): beep toggle
+            if (s->powered && !s->ignore_presses && s->hold_ms >= 50 &&
+                s->hold_ms < s->toggle_after_ms)
+                s->beep_pending = now + s->beep_lag_ms;
             if (s->on_release && s->powered && !s->ignore_presses &&
                 s->hold_ms >= s->toggle_after_ms) {
                 s->b1 = (s->b1 == 0x09) ? 0x07 : (s->b1 == 0x07 ? 0x09 : s->b1);
@@ -79,7 +90,13 @@ static void sim_run(sim_t *s, uint32_t *t, uint32_t end) {
             s->hold_ms = 0;
             s->toggled = false;
         }
-        if (s->powered && now % 100 == 0) ctl_status_frame(&s->ctl, now, 0x2C, s->b1);
+        if (s->beep_pending >= 0 && now >= s->beep_pending) {
+            s->beep = !s->beep;
+            s->beep_toggles++;
+            s->beep_pending = -1;
+        }
+        if (s->powered && now % 100 == 0)
+            ctl_status_frame(&s->ctl, now, 0x2C | s->beep, s->b1);
 
         if (now % 10 == 0) { // firmware loop period
             int mv = line_low ? 50 : 2700;
@@ -87,8 +104,13 @@ static void sim_run(sim_t *s, uint32_t *t, uint32_t end) {
             bool was = s->out;
             s->out = ctl_step(&s->ctl, now, pressed, s->sense.since_ms);
             if (s->out && !was) {
-                s->press_edges++;
-                if (s->b1 != 0x09) s->pressed_while_not_on = true;
+                if (s->ctl.beep == BEEP_PRESS) {
+                    s->beep_edges++;
+                    if (!s->beep) s->beep_pressed_while_off = true;
+                } else {
+                    s->press_edges++;
+                    if (s->b1 != 0x09) s->pressed_while_not_on = true;
+                }
             }
             gesture_t g = gest_step(&s->gest, now, pressed, ctl_sense_masked(&s->ctl, now));
             s->gestures[g]++;
@@ -260,6 +282,107 @@ static void test_resumed(void) {
     CHECK(c.state == ST_WAIT_STATUS, "state=%s", ctl_state_name(c.state));
 }
 
+static void shift_reverse(sim_t *s) { s->beep = true; }
+
+static void test_beep(void) {
+    printf("beep: reverse turns it on -> one short press mutes it\n");
+    sim_t s; uint32_t t = 0;
+    sim_init(&s, t, 0x07, true);
+    s.powered = true;
+    sim_run(&s, &t, 2000);
+    shift_reverse(&s);
+    uint32_t t0 = t;
+    while (s.beep && t < t0 + 5000) sim_run(&s, &t, t + 10);
+    CHECK(!s.beep, "beep still on");
+    CHECK(t - t0 < 700, "took %u ms", t - t0);
+    sim_run(&s, &t, t + 5000);
+    CHECK(s.beep_edges == 1 && !s.beep && s.press_edges == 0, "beep presses=%d long=%d",
+          s.beep_edges, s.press_edges);
+    CHECK(!s.beep_pressed_while_off, "pressed while beep off");
+
+    printf("  ...every reverse, 5 times: 5 short presses\n");
+    for (int i = 0; i < 5; i++) {
+        shift_reverse(&s);
+        sim_run(&s, &t, t + 4000);
+    }
+    CHECK(s.beep_edges == 6 && !s.beep, "beep presses=%d beep=%d", s.beep_edges, s.beep);
+
+    printf("  ...Dan taps to turn it back on: left on\n");
+    finger_tap(&s, &t, 150, 100);
+    sim_run(&s, &t, t + 5000);
+    CHECK(s.beep && s.beep_edges == 6, "beep=%d presses=%d", s.beep, s.beep_edges);
+    printf("  ...Dan taps it off again, next reverse is muted again\n");
+    finger_tap(&s, &t, 150, 100);
+    sim_run(&s, &t, t + 2000);
+    shift_reverse(&s);
+    sim_run(&s, &t, t + 3000);
+    CHECK(!s.beep && s.beep_edges == 7, "beep=%d presses=%d", s.beep, s.beep_edges);
+}
+
+static void test_beep_with_autobrake(void) {
+    printf("beep + auto-brake: reverse during settling, both handled, no clash\n");
+    sim_t s; uint32_t t = 0;
+    sim_init(&s, t, 0x09, true);
+    s.powered = true;
+    sim_run(&s, &t, 1500);
+    shift_reverse(&s); // backing out straight away
+    sim_run(&s, &t, 20000);
+    CHECK(!s.beep && s.b1 == 0x07, "beep=%d b1=%02x", s.beep, s.b1);
+    CHECK(s.beep_edges == 1 && s.press_edges == 1, "beep=%d long=%d", s.beep_edges, s.press_edges);
+    CHECK(!s.pressed_while_not_on && !s.beep_pressed_while_off, "bad press");
+
+    printf("  ...reverse while the long press is held: short press waits\n");
+    sim_init(&s, t = 0, 0x09, true);
+    s.powered = true;
+    s.ignore_presses = true; // first long press ignored -> retry later
+    sim_run(&s, &t, SETTLE_MS + 1000);
+    CHECK(s.out && s.ctl.state == ST_PRESSING, "not pressing");
+    s.ignore_presses = false;
+    shift_reverse(&s);
+    sim_run(&s, &t, 40000);
+    CHECK(!s.beep && s.b1 == 0x07, "beep=%d b1=%02x", s.beep, s.b1);
+    CHECK(!s.pressed_while_not_on && !s.beep_pressed_while_off, "bad press");
+}
+
+static void test_beep_slow_module(void) {
+    printf("beep: module reports the toggle 1.2 s late: no double press\n");
+    sim_t s; uint32_t t = 0;
+    sim_init(&s, t, 0x07, true);
+    s.powered = true;
+    s.beep_lag_ms = 1200;
+    sim_run(&s, &t, 2000);
+    shift_reverse(&s);
+    sim_run(&s, &t, t + 10000);
+    CHECK(!s.beep && s.beep_edges == 1, "beep=%d presses=%d", s.beep, s.beep_edges);
+
+    printf("  ...module ignores short presses: two tries, then leaves it\n");
+    sim_init(&s, t = 0, 0x07, true);
+    s.powered = true;
+    sim_run(&s, &t, 2000);
+    s.ignore_presses = true;
+    shift_reverse(&s);
+    sim_run(&s, &t, t + 20000);
+    CHECK(s.beep && s.beep_edges == BEEP_MAX_ATTEMPTS, "presses=%d", s.beep_edges);
+}
+
+static void test_beep_disabled(void) {
+    printf("beep: automation disabled or mute off -> no short press\n");
+    sim_t s; uint32_t t = 0;
+    sim_init(&s, t, 0x07, false);
+    s.powered = true;
+    sim_run(&s, &t, 2000);
+    shift_reverse(&s);
+    sim_run(&s, &t, t + 5000);
+    CHECK(s.beep && s.beep_edges == 0, "presses=%d", s.beep_edges);
+    sim_init(&s, t = 0, 0x07, true);
+    s.ctl.mute_beep = false;
+    s.powered = true;
+    sim_run(&s, &t, 2000);
+    shift_reverse(&s);
+    sim_run(&s, &t, t + 5000);
+    CHECK(s.beep && s.beep_edges == 0, "presses=%d", s.beep_edges);
+}
+
 static void test_finger_on_button(void) {
     printf("Dan holding the button when armed: waits for release\n");
     sim_t s; uint32_t t = 0;
@@ -343,8 +466,8 @@ static void test_gestures(void) {
 // ---- Replay of recorded captures -----------------------------------------
 
 typedef struct {
-    int frames, presses;
-    bool press_on_non09;
+    int frames, presses, beep_presses;
+    bool press_on_non09, beep_press_while_off;
     uint8_t first_b1;
     ctl_t ctl;
 } replay_t;
@@ -370,8 +493,13 @@ static int replay(const char *path, replay_t *r) {
             bool was = out;
             out = ctl_step(&r->ctl, t, p, se.since_ms);
             if (out && !was) {
-                r->presses++;
-                if (r->ctl.b1 != 0x09) r->press_on_non09 = true;
+                if (r->ctl.beep == BEEP_PRESS) {
+                    r->beep_presses++;
+                    if (!(r->ctl.b0 & 1)) r->beep_press_while_off = true;
+                } else {
+                    r->presses++;
+                    if (r->ctl.b1 != 0x09) r->press_on_non09 = true;
+                }
             }
         }
         // T + 8 hex id + dlc + data
@@ -403,9 +531,10 @@ static void test_replays(const char *dir) {
             failures++;
             continue;
         }
-        printf("replay %-20s frames=%4d first=%02x presses=%d end=%s/%s\n", logs[i],
-               r.frames, r.first_b1, r.presses, ctl_state_name(r.ctl.state),
+        printf("replay %-20s frames=%4d first=%02x long=%d beep=%d end=%s/%s\n", logs[i],
+               r.frames, r.first_b1, r.presses, r.beep_presses, ctl_state_name(r.ctl.state),
                ctl_done_name(r.ctl.done_reason));
+        CHECK(!r.beep_press_while_off, "%s: short press while beep off", logs[i]);
         CHECK(!r.press_on_non09, "%s: pressed while status != 09", logs[i]);
         CHECK(r.presses <= MAX_ATTEMPTS, "%s: %d presses", logs[i], r.presses);
         if (r.first_b1 == 0x07)
@@ -424,6 +553,10 @@ int main(int argc, char **argv) {
     test_gives_up();
     test_slow_toggle();
     test_finger_on_button();
+    test_beep();
+    test_beep_with_autobrake();
+    test_beep_slow_module();
+    test_beep_disabled();
     test_toggle_on_release();
     test_resumed();
     test_no_sense_fault();

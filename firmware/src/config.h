@@ -37,6 +37,18 @@
 #define MAX_ATTEMPTS 2
 #define SENSE_CHECK_MS 200    // our own press must show on the sense line by now
 
+// ---- Beep mute ---------------------------------------------------------------
+// 0x05C17002 byte 0 bit 0 = parking warning sound active. Shifting into
+// reverse sets it (~0.2 s after the shift, in stage3_gear.log); a short press
+// toggles it. Mute it with a short press as soon as it turns on, unless Dan's
+// own press just turned it on.
+#define BEEP_STABLE_N 2          // frames with bit 0 set before acting
+#define BEEP_PRESS_MS 300        // short press (well under the 2 s long press)
+#define BEEP_VERIFY_MS 1500      // wait for bit 0 to clear
+#define BEEP_MAX_ATTEMPTS 2      // per beep-on episode
+#define BEEP_USER_WINDOW_MS 1000 // Dan pressed this recently -> his choice
+#define BEEP_SELF_WINDOW_MS 2000 // back on this soon after our release -> leave it
+
 // ---- Button sense (mV at GPIO3) ------------------------------------------
 // Released: 12.2-14.4 V -> ~2.6-3.1 V. Pressed: near 0 V (exact value
 // unmeasured; depends on the pull-up inside the parking module).

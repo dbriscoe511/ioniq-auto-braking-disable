@@ -44,7 +44,9 @@ static const char PAGE[] =
     "</style></head><body><h2>Parking Safety auto-disable</h2>"
     "<pre id=s>loading...</pre>"
     "<button onclick=\"en(1)\">Enable automation</button>"
-    "<button onclick=\"en(0)\">Disable automation</button>"
+    "<button onclick=\"en(0)\">Disable automation</button><br>"
+    "<button onclick=\"mu(1)\">Mute reverse beep</button>"
+    "<button onclick=\"mu(0)\">Keep reverse beep</button>"
     "<h3>Firmware update</h3><input type=file id=f accept='.bin'> "
     "<button onclick=up()>Upload</button><p id=o></p>"
     "<script>"
@@ -52,6 +54,7 @@ static const char PAGE[] =
     "s.textContent=JSON.stringify(j,null,1)}catch(e){s.textContent='offline'}}"
     "setInterval(r,1000);r();"
     "async function en(v){await fetch('/enable?on='+v,{method:'POST'});r()}"
+    "async function mu(v){await fetch('/mute?on='+v,{method:'POST'});r()}"
     "async function up(){let x=f.files[0];if(!x)return;o.textContent='uploading...';"
     "let q=await fetch('/ota',{method:'POST',body:x});o.textContent=await q.text()}"
     "</script></body></html>";
@@ -62,7 +65,7 @@ static esp_err_t h_root(httpd_req_t *req) {
 }
 
 static esp_err_t h_status(httpd_req_t *req) {
-    char buf[512];
+    char buf[768];
     size_t n = app_status_json(buf, sizeof buf);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, buf, n);
@@ -75,6 +78,15 @@ static esp_err_t h_enable(httpd_req_t *req) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "use ?on=0 or ?on=1");
     app_request_enable(v[0] == '1');
     return httpd_resp_sendstr(req, v[0] == '1' ? "enabled\n" : "disabled\n");
+}
+
+static esp_err_t h_mute(httpd_req_t *req) {
+    char q[32], v[4];
+    if (httpd_req_get_url_query_str(req, q, sizeof q) != ESP_OK ||
+        httpd_query_key_value(q, "on", v, sizeof v) != ESP_OK || (v[0] != '0' && v[0] != '1'))
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "use ?on=0 or ?on=1");
+    app_request_mute(v[0] == '1');
+    return httpd_resp_sendstr(req, v[0] == '1' ? "beep mute on\n" : "beep mute off\n");
 }
 
 static esp_err_t h_ota(httpd_req_t *req) {
@@ -144,6 +156,7 @@ static bool server_start(void) {
         {.uri = "/status", .method = HTTP_GET, .handler = h_status},
         {.uri = "/enable", .method = HTTP_POST, .handler = h_enable},
         {.uri = "/ota", .method = HTTP_POST, .handler = h_ota},
+        {.uri = "/mute", .method = HTTP_POST, .handler = h_mute},
     };
     for (size_t i = 0; i < sizeof uris / sizeof *uris; i++)
         if (httpd_register_uri_handler(server, &uris[i]) != ESP_OK) return false;
