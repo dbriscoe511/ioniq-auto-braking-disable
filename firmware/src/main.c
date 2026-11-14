@@ -56,8 +56,7 @@ static bool press_cur;
 #define LATCH_MAGIC 0x50534430u
 static RTC_NOINIT_ATTR uint32_t rtc_latch;
 
-static bool recovery_ok;    // AP + web server came up at boot (new image)
-static bool gesture_proven; // a 6-tap gesture was recognised since boot
+static bool recovery_ok; // AP + web server came up at boot
 
 static bool ota_pending_verify(void) {
     esp_ota_img_states_t st;
@@ -216,13 +215,14 @@ size_t app_status_json(char *buf, size_t len) {
         "\"attempts\":%u,\"presses\":%" PRIu32 ",\"drives\":%" PRIu32 ","
         "\"sense_mv\":%d,\"btn_pressed\":%s,\"fault_no_sense\":%s,"
         "\"failsafe_tripped\":%s,\"rx_frames\":%" PRIu32 ",\"rx_missed\":%" PRIu32 ","
-        "\"mute_beep\":%s,\"beep_on\":%s,\"beep\":\"%s\",\"beep_presses\":%" PRIu32 "}",
+        "\"wifi\":%s,\"home_ip\":\"%s\",\"mute_beep\":%s,\"beep_on\":%s,\"beep\":\"%s\",\"beep_presses\":%" PRIu32 "}",
         d->version, s.now / 1000, s.ctl.enabled ? "true" : "false",
         ctl_state_name(s.ctl.state), ctl_done_name(s.ctl.done_reason),
         s.ctl.have_status ? "true" : "false", s.ctl.b0, s.ctl.b1, s.ctl.attempts,
         s.ctl.presses, s.ctl.drives, s.sense_mv, s.btn ? "true" : "false",
         s.ctl.fault_no_sense ? "true" : "false", s.failsafe_tripped ? "true" : "false",
-        s.rx_frames, s.rx_missed, s.ctl.mute_beep ? "true" : "false",
+        s.rx_frames, s.rx_missed, wifi_ota_is_open() ? "true" : "false", wifi_ota_sta_ip(),
+        s.ctl.mute_beep ? "true" : "false",
         (s.ctl.b0 & 1) ? "true" : "false", s.ctl.beep_pending ? "pending" : (s.ctl.beep_pressing ? "pressing" : "idle"), s.ctl.beep_presses);
     return n < 0 ? 0 : ((size_t)n < len ? (size_t)n : len - 1);
 }
@@ -297,7 +297,6 @@ static void control_task(void *arg) {
             // Works with or without CAN: it's the way in when CAN is broken.
             ESP_LOGW(TAG, "Wi-Fi window opened by button gesture");
             wifi_ota_open(now, WIFI_GESTURE_WINDOW_MS);
-            gesture_proven = true;
             break;
         case GEST_NONE: break;
         }
@@ -313,11 +312,9 @@ static void control_task(void *arg) {
             last_state = ctl.state;
         }
 
-        // A new image is confirmed only once the way back in has been shown
-        // to work: AP up at boot, and a 6-tap gesture recognised. Until then
-        // the next reset or power cycle rolls back to the previous image.
-        if (pending_verify && now >= MARK_VALID_AFTER_MS && !ctl.press_out &&
-            (gesture_proven || !recovery_ok)) {
+        // A new image is confirmed once it has run 30 s with its boot AP up
+        // (the way back in). If the AP failed, roll back to the old image.
+        if (pending_verify && now >= MARK_VALID_AFTER_MS && !ctl.press_out) {
             if (recovery_ok) {
                 esp_ota_mark_app_valid_cancel_rollback();
                 pending_verify = false;
@@ -363,14 +360,11 @@ void app_main(void) {
 
     adc_init();
     can_init();
-    wifi_ota_init(); // Wi-Fi stays off; Bluetooth is not built in
-    // Wi-Fi is off by default (LDO heat, power). Only right after an OTA
-    // update does the new image bring the AP up, to prove the update path
-    // still works before it is confirmed (else the bootloader rolls back).
-    if (ota_pending_verify()) {
-        recovery_ok = wifi_ota_open(now_ms(), WIFI_GESTURE_WINDOW_MS);
-        if (!recovery_ok) ESP_LOGE(TAG, "Wi-Fi AP failed on a new image");
-    }
+    wifi_ota_init(); // Bluetooth is not built in
+    // AP up for 60 s after every power-on, then off (LDO heat). This is the
+    // way in that doesn't depend on the button/gesture code; 6 taps reopen it.
+    recovery_ok = wifi_ota_open(now_ms(), WIFI_BOOT_WINDOW_MS);
+    if (!recovery_ok) ESP_LOGE(TAG, "Wi-Fi AP failed to start");
 
     xTaskCreate(control_task, "control", 4096, NULL, 10, NULL);
 }

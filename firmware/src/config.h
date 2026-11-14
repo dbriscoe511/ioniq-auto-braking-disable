@@ -62,9 +62,10 @@
 #define GEST_WIFI_COUNT 6     // open the Wi-Fi/OTA window
 
 // ---- Wi-Fi / OTA ---------------------------------------------------------
-// Off by default: an LDO drops ~9 V, so Wi-Fi (~80-120 mA) is 1-1.5 W of
-// heat in a closed console vs ~0.3 W idle. Up only on request (6 taps), or
-// once after an OTA so the new image can prove the update path still works.
+// Mostly off: an LDO drops ~9 V, so Wi-Fi (~80-120 mA) is 1-1.5 W of heat in
+// a closed console vs ~0.3 W idle. Up for 60 s after each power-on, and on
+// request (6 taps).
+#define WIFI_BOOT_WINDOW_MS (60 * 1000)        // after every power-on
 #define WIFI_GESTURE_WINDOW_MS (2 * 60 * 1000) // with no client connected
 #define WIFI_CLIENT_MAX_MS (10 * 60 * 1000)    // hard cap even with a client
 #define WIFI_AP_SSID_PREFIX "ps-disable-"

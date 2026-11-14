@@ -63,50 +63,60 @@ press only toggles the sound; auto-brake isn't affected.
 | Gesture | Effect |
 |---|---|
 | **4 quick taps** (each ≤ 0.6 s, gaps ≤ 0.6 s) | Automation on/off (both jobs; saved in flash). Only while the car is awake. |
-| **6 quick taps** | Turn Wi-Fi on (below). Works with or without CAN, e.g. on the bench, or when CAN reception is broken. |
+| **6 quick taps** | Reopen Wi-Fi for 2 min (below). Works with or without CAN. |
 
 Even counts leave the beep where it was. Taps more than 0.6 s apart, or any
 press longer than 0.6 s, never add up to a gesture.
 
-## Low power: Wi-Fi off, Bluetooth not built in
+## Wi-Fi: 60 s after power-on, otherwise off
 
-Per the LDO discussion: the 7805 drops ~9 V. At ~25–30 mA (CAN only) that's
-about 0.3 W. With Wi-Fi on (~80–120 mA) it's 1–1.5 W, which gets hot in a
-closed console. So:
+The 7805 drops ~9 V. At ~25–30 mA (CAN only) that's about 0.3 W; with Wi-Fi
+on (~80–120 mA) it's 1–1.5 W, which gets hot in a closed console. So Wi-Fi is
+up only in short windows:
 
-- **Wi-Fi is off by default.** 6 taps turn it on. It turns itself off after
-  2 min with nobody connected, and after 10 min regardless.
-- **Bluetooth is compiled out**, and the CPU runs at 80 MHz.
-- **The way in is the 6-tap gesture.** A build that breaks the button sense
-  or gesture code would leave USB as the only way back (opening the console).
-  Rollback (below) guards against that for OTA updates.
+- **60 s after every power-on.** This is the way in that doesn't depend on
+  the button code.
+- **6 quick taps** reopen it for 2 min (works without CAN, e.g. on the bench).
+- Any page load or request keeps it open; it closes 10 min after opening at most.
+- **Bluetooth is compiled out.** The CPU runs at 80 MHz.
 
-## Update over Wi-Fi
+While the window is open the board is reachable two ways (same page):
 
-1. In the car (awake), tap the Parking Safety button 6 times quickly.
-2. Join `ps-disable-xxxx` (WPA2, password set at build time) and open
-   `http://192.168.4.1/`. It shows live status, the two switches and a firmware upload.
-   Or from a terminal:
-   `curl --data-binary @.pio/build/supermini/firmware.bin http://192.168.4.1/ota`
-3. **Confirm it:** the new image starts Wi-Fi itself after the reboot.
-   Then **do the 6-tap gesture once.** It's confirmed only when its Wi-Fi came
-   up, it has run 30 s, *and* it recognised your 6 taps, which proves you can
-   get back in. Until then the next power cycle or reset (e.g. turning the car
-   off) goes back to the old image. If its Wi-Fi fails to start, it rolls
-   back immediately.
+- **Its own AP** `ps-disable-xxxx` (WPA2) at `http://192.168.4.1/` (in the car).
+- **Your home Wi-Fi** (if configured): it joins as `ps-disable` and logs its
+  IP; the status JSON shows it as `home_ip`. At home that's the easy route.
 
-Uploads are refused while the board is pressing, the reboot waits for a press
-to finish, and a stalled upload is dropped after 30 s.
+The page has live status, automation on/off, mute/keep the reverse beep, and
+a firmware upload. Or upload from a terminal:
+`curl --data-binary @.pio/build/supermini/firmware.bin http://<ip>/ota`
+
+**Rollback:** a new image is kept once it has run 30 s with its Wi-Fi up.
+If it crashes or resets before then, the bootloader goes back to the old
+image. Uploads are refused while the board is pressing, the reboot waits for
+a press to finish, and a stalled upload is dropped after 30 s.
 
 ## Build, flash, test
 
+Credentials live in `src/secrets.h`, which is gitignored and generated:
+
 ```sh
-uv tool install platformio                     # once
-PS_AP_PASS='...' pio run                        # build (fails if PS_AP_PASS < 8 chars)
-PS_AP_PASS='...' pio run -t upload              # flash over USB (hold BOOT if needed)
-pio device monitor                              # logs (USB, or UART0 on GPIO20/21)
-host_test/run.sh                                # logic tests, no hardware
+PS_AP_PASS='8+ chars' PS_STA_SSID='home' PS_STA_PASS='...' tools/make_secrets.py
+#   (or --ap-pass-file/--sta-ssid-file/--sta-pass-file; home network optional)
 ```
+
+```sh
+uv tool install platformio            # once
+pio run                                # build
+tools/flash_pi.sh                      # build + flash the C3 on labrador-pie over USB, show 20 s of log
+tools/flash_pi.sh --log 60             # just watch its log (USB) for 60 s
+pio run -t upload                      # or flash a C3 plugged into this machine
+host_test/run.sh                       # logic tests, no hardware
+```
+
+`tools/flash_pi.sh` copies the four images to the Pi and runs esptool there.
+That needs `uv tool install esptool` on the Pi, which is already done. The
+SuperMini's native USB needs no BOOT button: esptool resets it into the
+bootloader.
 
 `host_test/run.sh` runs `src/logic.c` two ways:
 - **Against a simulated parking module.** Its variants: toggling during the

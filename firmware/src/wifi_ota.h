@@ -12,6 +12,8 @@ bool wifi_ota_open(uint32_t now, uint32_t window_ms);
 // Call from the control loop; closes the AP when the window has passed.
 void wifi_ota_tick(uint32_t now);
 bool wifi_ota_is_open(void);
+// IP on the home network while connected, else "".
+const char *wifi_ota_sta_ip(void);
 
 // Implemented in main.c, called from the HTTP server task.
 size_t app_status_json(char *buf, size_t len);
