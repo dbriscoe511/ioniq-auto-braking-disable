@@ -448,7 +448,7 @@ def build():
     g = BY + 15.24
     s.wire(R2["2"], (bx, g), (Q1["1"][0], g), Q1["1"])
     s.power("power:GND", bx + 5.08, g)
-    R3 = s.place_by_pin("Device:R", "R3", "200", "2", (Q1["3"][0], BY - 10.16),
+    R3 = s.place_by_pin("Device:R", "R3", "200 1W", "2", (Q1["3"][0], BY - 10.16),
                         ref_at=(2.54, -1.27), val_at=(2.54, 1.27), just="left")
     s.wire(R3["2"], Q1["3"])
     top = (R3["1"][0], R3["1"][1] - 2.54)

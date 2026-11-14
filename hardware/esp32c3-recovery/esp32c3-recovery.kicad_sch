@@ -5674,7 +5674,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "200"
+		(property "Value" "200 1W"
 			(at 261.62 99.06 0)
 			(effects
 				(font

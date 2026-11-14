@@ -38,6 +38,7 @@ Everything else uses stock KiCad symbols (LM7805_TO220, SMAJ18A, 1N5819,
   (~200 ohms in series, other side to ground; not read by the panel MCU) and
   pin 5 idles at 12.2 V in the car. See docs/findings.md. The pressed voltage
   and current are still unmeasured; R3 = 200 ohms mirrors the factory switch path.
+  It is rated 1 W: a stiff 14.4 V node would put ~1 W in it, at the limit if held on, fine for timed presses.
 - **Regulator:** LM7805 (stock symbol) instead of the LM2940 from the design
   chat. It has no reverse-battery protection, but the tap is behind the
   panel's D1/D2. Its 35 V max input sits above the SMAJ18A clamp (~29 V).
