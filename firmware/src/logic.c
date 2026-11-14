@@ -44,59 +44,46 @@ static void finish(ctl_t *c, uint32_t now, done_reason_t r) {
 }
 
 static void new_drive(ctl_t *c, uint32_t now) {
+    c->have_status = false;
+    c->same_n = 0;
     c->attempts = 0;
-    c->seen_off = false;
+    c->beep_pending = false;
     c->done_reason = DONE_NONE;
-    c->sense_seen = false;
     enter(c, now, ST_WAIT_STATUS);
 }
 
-void ctl_init(ctl_t *c, uint32_t now, bool enabled) {
+void ctl_init(ctl_t *c, uint32_t now, bool enabled, bool mute_beep) {
     *c = (ctl_t){0};
     c->enabled = enabled;
-    c->mute_beep = true;
-    c->release_ms = now;
+    c->mute_beep = mute_beep;
+    c->release_ms = now - SELF_MASK_MS;
     new_drive(c, now);
 }
 
-void ctl_init_resumed(ctl_t *c, uint32_t now, bool enabled) {
-    ctl_init(c, now, enabled);
-    c->have_status = true; // arm the "status gone" timer from now
+void ctl_init_resumed(ctl_t *c, uint32_t now, bool enabled, bool mute_beep) {
+    ctl_init(c, now, enabled, mute_beep);
+    c->have_status = true; // run the "status gone" timer from now
     c->last_rx_ms = now;
-    c->same_n = 0;
-    c->b0_same_n = 0;
-    c->b1 = 0;
     c->drives = 1;
     finish(c, now, DONE_RESUMED);
 }
 
+static bool user_recent(const ctl_t *c, uint32_t now) {
+    return c->user_down ||
+           (c->user_seen && ELAPSED(now, c->user_last_ms) < BEEP_USER_WINDOW_MS);
+}
+
 void ctl_status_frame(ctl_t *c, uint32_t now, uint8_t b0, uint8_t b1) {
     bool beep = b0 & 1;
-    if (c->have_status && c->b0_same_n && beep == (c->b0 & 1)) {
-        if (c->b0_same_n < UINT16_MAX) c->b0_same_n++;
-    } else {
-        c->b0_same_n = 1;
-        c->beep_episode = beep;
-        c->beep_attempts = 0;
-        // Turned on right after Dan's own press: that was him, leave it.
-        // Or it came back on right after our own press (module slow to
-        // report, or two presses landed): stop, so we can't oscillate.
-        c->beep_user = beep && ((c->user_pressed &&
-                                 ELAPSED(now, c->user_press_ms) < BEEP_USER_WINDOW_MS) ||
-                                (c->beep_presses &&
-                                 ELAPSED(now, c->beep_release_ms) < BEEP_SELF_WINDOW_MS) ||
-                                c->beep == BEEP_PRESS);
-    }
-    if (c->have_status && b1 == c->b1) {
-        if (c->same_n < UINT16_MAX) c->same_n++;
-    } else {
-        c->same_n = 1;
-    }
+    bool was_beep = c->have_status && (c->b0 & 1);
+    if (beep && !was_beep) c->beep_pending = !user_recent(c, now); // Dan's -> leave it
+    if (!beep) c->beep_pending = false;
+
+    c->same_n = (c->have_status && b1 == c->b1 && c->same_n < UINT16_MAX) ? c->same_n + 1 : 1;
     c->have_status = true;
     c->last_rx_ms = now;
     c->b0 = b0;
     c->b1 = b1;
-    if (b1 == STATUS_OFF && c->same_n >= 3) c->seen_off = true;
 }
 
 static bool fresh(const ctl_t *c, uint32_t now) {
@@ -109,31 +96,34 @@ static bool stable(const ctl_t *c, uint32_t now, uint8_t v) {
     return fresh(c, now) && c->b1 == v && c->same_n >= STATUS_STABLE_N;
 }
 
-static void release(ctl_t *c, uint32_t now) {
-    if (c->press_out) c->release_ms = now;
-    c->press_out = false;
+bool ctl_sense_masked(const ctl_t *c, uint32_t now) {
+    return c->press_out || ELAPSED(now, c->release_ms) < SELF_MASK_MS;
 }
 
-bool ctl_step(ctl_t *c, uint32_t now, bool btn_pressed, uint32_t btn_since_ms) {
-    // Status gone for a while: car is off (or the bus went quiet). Anything
-    // after this is a new drive. Always release first.
-    if (c->have_status && ELAPSED(now, c->last_rx_ms) > STATUS_GONE_MS) {
-        release(c, now);
-        c->have_status = false;
-        c->same_n = 0;
-        c->b0_same_n = 0;
-        c->beep_episode = false;
-        c->beep = BEEP_IDLE;
-        new_drive(c, now);
+static void track_user(ctl_t *c, uint32_t now, bool btn) {
+    if (ctl_sense_masked(c, now)) return;
+    if (btn && !c->user_down) c->user_down_ms = now;
+    c->user_down = btn;
+    if (btn) {
+        c->user_seen = true;
+        c->user_last_ms = now;
+        // Dan's long press: his call on auto-brake for the rest of the drive.
+        if (ELAPSED(now, c->user_down_ms) >= USER_LONG_MS && c->state != ST_WAIT_STATUS &&
+            c->state != ST_DONE)
+            finish(c, now, DONE_USER);
     }
+}
 
-    // Dan's own presses (ours are masked out).
-    if (btn_pressed && !ctl_sense_masked(c, now)) {
-        c->user_pressed = true;
-        c->user_press_ms = now;
-    }
-    bool btn_idle = !btn_pressed && ELAPSED(now, btn_since_ms) >= BTN_IDLE_MS;
+bool ctl_step(ctl_t *c, uint32_t now, bool btn, uint32_t btn_since_ms) {
+    bool was_out = c->press_out;
 
+    // Status gone: car off. Whatever comes next is a new drive.
+    if (c->have_status && ELAPSED(now, c->last_rx_ms) > STATUS_GONE_MS) new_drive(c, now);
+
+    track_user(c, now, btn);
+    bool btn_idle = !btn && ELAPSED(now, btn_since_ms) >= BTN_IDLE_MS;
+
+    // ---- auto-brake, once per drive ----
     switch (c->state) {
     case ST_WAIT_STATUS:
         if (c->have_status) {
@@ -141,111 +131,55 @@ bool ctl_step(ctl_t *c, uint32_t now, bool btn_pressed, uint32_t btn_since_ms) {
             enter(c, now, ST_SETTLING);
         }
         break;
-
     case ST_SETTLING:
-        // Already off at any point this drive (e.g. Dan's own long press,
-        // then maybe back on): never second-guess him.
-        if (c->seen_off) finish(c, now, DONE_ALREADY_OFF);
-        else if (ELAPSED(now, c->state_ms) >= SETTLE_MS) enter(c, now, ST_ARMED);
+        if (ELAPSED(now, c->state_ms) >= SETTLE_MS) enter(c, now, ST_ARMED);
         break;
-
     case ST_ARMED:
-        if (!c->enabled) {
-            finish(c, now, DONE_DISABLED);
-        } else if (c->seen_off) {
-            // Off at some point this drive, by us or by Dan. If it is back
-            // on now, that was Dan: leave it.
+        if (!c->enabled) finish(c, now, DONE_DISABLED);
+        else if (stable(c, now, STATUS_OFF))
             finish(c, now, c->attempts ? DONE_TURNED_OFF : DONE_ALREADY_OFF);
-        } else if (c->attempts >= MAX_ATTEMPTS) {
-            finish(c, now, DONE_GAVE_UP);
-        } else if (stable(c, now, STATUS_ON) && btn_idle && c->beep == BEEP_IDLE) {
-            // Fresh, stable 0x09 and nobody is touching the button.
+        else if (c->attempts >= MAX_ATTEMPTS) finish(c, now, DONE_GAVE_UP);
+        else if (stable(c, now, STATUS_ON) && btn_idle && !c->beep_pressing) {
             c->attempts++;
             c->presses++;
-            c->sense_seen = false;
-            c->press_out = true;
             enter(c, now, ST_PRESSING);
         }
-        // Unknown byte-1 values or a stale status: keep waiting.
         break;
-
     case ST_PRESSING: {
         uint32_t held = ELAPSED(now, c->state_ms);
-        if (btn_pressed) c->sense_seen = true;
-        if (held >= SENSE_CHECK_MS && !c->sense_seen) c->fault_no_sense = true;
         bool off_seen = fresh(c, now) && c->b1 == STATUS_OFF && c->same_n >= 2;
-        bool lost = !c->have_status ||
-                    ELAPSED(now, c->last_rx_ms) > 1000; // status stopped
-        if (off_seen || lost || held >= HOLD_MS) {
-            release(c, now);
-            enter(c, now, ST_VERIFY);
-        }
+        if (off_seen || !fresh(c, now) || held >= HOLD_MS) enter(c, now, ST_VERIFY);
         break;
     }
-
     case ST_VERIFY:
-        if (stable(c, now, STATUS_OFF)) {
-            finish(c, now, DONE_TURNED_OFF);
-        } else if (ELAPSED(now, c->state_ms) >= VERIFY_MS) {
-            if (c->attempts >= MAX_ATTEMPTS) finish(c, now, DONE_GAVE_UP);
-            else enter(c, now, ST_RETRY_GAP);
-        }
-        break;
-
-    case ST_RETRY_GAP:
         if (stable(c, now, STATUS_OFF)) finish(c, now, DONE_TURNED_OFF);
-        else if (ELAPSED(now, c->state_ms) >= RETRY_GAP_MS) enter(c, now, ST_ARMED);
+        else if (ELAPSED(now, c->state_ms) >= VERIFY_MS) enter(c, now, ST_ARMED); // retry
         break;
-
     case ST_DONE:
-        // Latched for this drive, including when Dan turns auto-brake back
-        // on himself. Cleared only by the status disappearing (above).
         break;
     }
 
-    // ---- Beep mute: short press whenever the warning sound turns on ----
-    switch (c->beep) {
-    case BEEP_IDLE:
-        if (c->enabled && c->mute_beep && c->beep_episode && !c->beep_user &&
-            c->beep_attempts < BEEP_MAX_ATTEMPTS && fresh(c, now) && (c->b0 & 1) &&
-            c->b0_same_n >= BEEP_STABLE_N && c->state != ST_PRESSING && btn_idle) {
-            c->beep_attempts++;
-            c->beep_presses++;
-            c->press_out = true;
-            c->beep = BEEP_PRESS;
-            c->beep_ms = now;
-        }
-        break;
-    case BEEP_PRESS:
-        if (ELAPSED(now, c->beep_ms) >= BEEP_PRESS_MS || !fresh(c, now)) {
-            release(c, now);
-            c->beep_release_ms = now;
-            c->beep = BEEP_VERIFY;
-            c->beep_ms = now;
-        }
-        break;
-    case BEEP_VERIFY:
-        // Done once bit 0 clears; otherwise IDLE retries (attempt limit).
-        if (!c->beep_episode || ELAPSED(now, c->beep_ms) >= BEEP_VERIFY_MS)
-            c->beep = BEEP_IDLE;
-        break;
+    // ---- beep: one short press each time it turns on (not by Dan) ----
+    if (c->beep_pressing) {
+        if (ELAPSED(now, c->beep_ms) >= BEEP_PRESS_MS) c->beep_pressing = false;
+    } else if (c->beep_pending && c->enabled && c->mute_beep && fresh(c, now) &&
+               c->state != ST_PRESSING && btn_idle) {
+        c->beep_pending = false; // one try per beep-on
+        c->beep_pressing = true;
+        c->beep_ms = now;
+        c->beep_presses++;
     }
 
-    if (c->state != ST_PRESSING && c->beep != BEEP_PRESS) release(c, now);
+    // ---- output ----
+    c->press_out = c->state == ST_PRESSING || c->beep_pressing;
+    if (c->press_out && !was_out) c->sense_seen = false;
+    if (c->press_out) {
+        if (btn) c->sense_seen = true;
+        uint32_t since = c->beep_pressing ? c->beep_ms : c->state_ms;
+        if (ELAPSED(now, since) >= SENSE_CHECK_MS && !c->sense_seen) c->fault_no_sense = true;
+    }
+    if (was_out && !c->press_out) c->release_ms = now;
     return c->press_out;
-}
-
-const char *ctl_beep_name(beep_state_t s) {
-    switch (s) {
-    case BEEP_IDLE: return "idle";
-    case BEEP_PRESS: return "press";
-    case BEEP_VERIFY: return "verify";
-    }
-    return "?";
-}
-
-bool ctl_sense_masked(const ctl_t *c, uint32_t now) {
-    return c->press_out || ELAPSED(now, c->release_ms) < GEST_MASK_AFTER_MS;
 }
 
 const char *ctl_state_name(ctl_state_t s) {
@@ -255,7 +189,6 @@ const char *ctl_state_name(ctl_state_t s) {
     case ST_ARMED: return "armed";
     case ST_PRESSING: return "pressing";
     case ST_VERIFY: return "verify";
-    case ST_RETRY_GAP: return "retry_gap";
     case ST_DONE: return "done";
     }
     return "?";
@@ -268,6 +201,7 @@ const char *ctl_done_name(done_reason_t r) {
     case DONE_TURNED_OFF: return "turned_off";
     case DONE_GAVE_UP: return "gave_up";
     case DONE_DISABLED: return "disabled";
+    case DONE_USER: return "user";
     case DONE_RESUMED: return "resumed";
     }
     return "?";

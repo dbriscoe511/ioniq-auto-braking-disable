@@ -58,6 +58,12 @@ static RTC_NOINIT_ATTR uint32_t rtc_latch;
 
 static bool recovery_ok; // AP + web server came up at boot
 
+static bool ota_pending_verify(void) {
+    esp_ota_img_states_t st;
+    return esp_ota_get_state_partition(esp_ota_get_running_partition(), &st) == ESP_OK &&
+           st == ESP_OTA_IMG_PENDING_VERIFY;
+}
+
 static adc_oneshot_unit_handle_t adc;
 static adc_cali_handle_t adc_cali;
 static adc_channel_t adc_chan;
@@ -97,7 +103,7 @@ static void failsafe_cb(void *arg) {
 static void press_set(bool on) {
     if (on && !press_cur) {
         gpio_set_level(PIN_PRESS, 1);
-        if (ctl.beep == BEEP_PRESS) ESP_LOGI(TAG, "beep on: short press to mute");
+        if (ctl.beep_pressing) ESP_LOGI(TAG, "beep on: short press to mute");
         esp_timer_stop(failsafe_timer); // ok if not running
         ESP_ERROR_CHECK(esp_timer_start_once(failsafe_timer, HOLD_MAX_MS * 1000ULL));
         ESP_LOGI(TAG, "press");
@@ -216,7 +222,7 @@ size_t app_status_json(char *buf, size_t len) {
         s.ctl.presses, s.ctl.drives, s.sense_mv, s.btn ? "true" : "false",
         s.ctl.fault_no_sense ? "true" : "false", s.failsafe_tripped ? "true" : "false",
         s.rx_frames, s.rx_missed, s.ctl.mute_beep ? "true" : "false",
-        (s.ctl.b0 & 1) ? "true" : "false", ctl_beep_name(s.ctl.beep), s.ctl.beep_presses);
+        (s.ctl.b0 & 1) ? "true" : "false", s.ctl.beep_pending ? "pending" : (s.ctl.beep_pressing ? "pressing" : "idle"), s.ctl.beep_presses);
     return n < 0 ? 0 : ((size_t)n < len ? (size_t)n : len - 1);
 }
 
@@ -241,22 +247,17 @@ static void control_task(void *arg) {
     bool soft_reset = rr == ESP_RST_SW || rr == ESP_RST_PANIC || rr == ESP_RST_INT_WDT ||
                       rr == ESP_RST_TASK_WDT || rr == ESP_RST_WDT;
     if (soft_reset && rtc_latch == LATCH_MAGIC) {
-        ctl_init_resumed(&ctl, now, load_enabled());
+        ctl_init_resumed(&ctl, now, load_enabled(), load_flag("mute"));
         ESP_LOGW(TAG, "reset mid-drive after done: staying latched until status gone");
     } else {
-        ctl_init(&ctl, now, load_enabled());
+        ctl_init(&ctl, now, load_enabled(), load_flag("mute"));
     }
     rtc_latch = 0;
-    ctl.mute_beep = load_flag("mute");
     sense_init(&sense, now);
     gest_init(&gest);
     ESP_LOGI(TAG, "automation %s", ctl.enabled ? "enabled" : "disabled");
 
-    bool pending_verify = false;
-    esp_ota_img_states_t st;
-    if (esp_ota_get_state_partition(esp_ota_get_running_partition(), &st) == ESP_OK &&
-        st == ESP_OTA_IMG_PENDING_VERIFY)
-        pending_verify = true;
+    bool pending_verify = ota_pending_verify();
 
     ctl_state_t last_state = ctl.state;
     TickType_t wake = xTaskGetTickCount();
@@ -354,11 +355,14 @@ void app_main(void) {
 
     adc_init();
     can_init();
-    wifi_ota_init();
-    // Recovery path that does not depend on the button/ADC code: the AP is
-    // up for a minute after every power-on.
-    recovery_ok = wifi_ota_open(now_ms(), WIFI_BOOT_WINDOW_MS);
-    if (!recovery_ok) ESP_LOGE(TAG, "Wi-Fi recovery AP failed to start");
+    wifi_ota_init(); // Wi-Fi stays off; Bluetooth is not built in
+    // Wi-Fi is off by default (LDO heat, power). Only right after an OTA
+    // update does the new image bring the AP up, to prove the update path
+    // still works before it is confirmed (else the bootloader rolls back).
+    if (ota_pending_verify()) {
+        recovery_ok = wifi_ota_open(now_ms(), WIFI_GESTURE_WINDOW_MS);
+        if (!recovery_ok) ESP_LOGE(TAG, "Wi-Fi AP failed on a new image");
+    }
 
     xTaskCreate(control_task, "control", 4096, NULL, 10, NULL);
 }

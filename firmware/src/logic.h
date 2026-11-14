@@ -18,79 +18,77 @@ void sense_init(sense_t *s, uint32_t now);
 bool sense_update(sense_t *s, uint32_t now, int mv);
 
 // ---- Controller -----------------------------------------------------------
+// Two jobs sharing one press output:
+//  - auto-brake: once per drive, long-press if 0x05C17002 byte 1 reads 0x09.
+//  - beep: each time byte 0 bit 0 turns on (reverse), one short press.
+// Dan's own presses are seen directly on the sense line, so there's no
+// guessing about who changed what:
+//  - a long press by Dan during a drive -> leave auto-brake alone this drive
+//  - the beep turning on right after Dan's press -> leave that beep on
 typedef enum {
-    ST_WAIT_STATUS, // no 0x05C17002 seen this drive
+    ST_WAIT_STATUS, // no 0x05C17002 this drive
     ST_SETTLING,    // status present, waiting SETTLE_MS
-    ST_ARMED,       // ready to decide / press
-    ST_PRESSING,    // holding the button
-    ST_VERIFY,      // released, waiting for 0x07
-    ST_RETRY_GAP,   // before the single retry
+    ST_ARMED,       // ready to press
+    ST_PRESSING,    // long press held
+    ST_VERIFY,      // released, waiting for 0x07 (then retry or done)
     ST_DONE,        // nothing more until the status disappears (car off)
 } ctl_state_t;
 
-typedef enum { BEEP_IDLE, BEEP_PRESS, BEEP_VERIFY } beep_state_t;
-
 typedef enum {
     DONE_NONE,
-    DONE_ALREADY_OFF, // status was 0x07 before we pressed
-    DONE_TURNED_OFF,  // our press worked (0x09 -> 0x07)
+    DONE_ALREADY_OFF, // read 0x07 before we pressed
+    DONE_TURNED_OFF,  // our press worked
     DONE_GAVE_UP,     // MAX_ATTEMPTS presses, still 0x09
-    DONE_DISABLED,    // automation switched off by Dan
+    DONE_DISABLED,    // automation switched off
+    DONE_USER,        // Dan long-pressed the button himself this drive
     DONE_RESUMED,     // rebooted mid-drive after being done
 } done_reason_t;
 
 typedef struct {
-    // status frame tracking
+    // latest status frame
     bool have_status;
     uint32_t last_rx_ms;
     uint8_t b0, b1;
-    uint16_t same_n; // consecutive frames with this b1
-    bool seen_off;   // 0x07 seen (3+ frames) this drive: Dan's choice stands
-    uint16_t b0_same_n; // consecutive frames with this byte-0 bit 0
+    uint16_t same_n; // consecutive frames with this byte 1
 
-    // beep mute
-    bool mute_beep;      // setting
-    bool beep_episode;   // bit 0 is set and this episode is still open
-    bool beep_user;      // Dan's own press turned it on: leave it
-    uint8_t beep_attempts;
-    beep_state_t beep;
-    uint32_t beep_ms;    // when the beep state was entered
-    bool user_pressed;   // Dan has pressed the button since boot
-    uint32_t user_press_ms; // last time his press was seen (not ours)
-    uint32_t beep_presses;
-    uint32_t beep_release_ms; // end of our last short press
-
-    // state machine
+    // auto-brake state machine
     ctl_state_t state;
     done_reason_t done_reason;
-    uint32_t state_ms; // when the current state was entered
+    uint32_t state_ms;
     uint8_t attempts;
-    bool press_out;
-    uint32_t release_ms; // last time press_out went false
-    bool sense_seen;     // our press showed up on the sense line
 
-    // configuration / diagnostics
-    bool enabled;
-    bool fault_no_sense; // a press did not pull the line low (wiring?)
-    uint32_t drives;     // drive cycles seen since boot
-    uint32_t presses;    // presses made since boot
+    // beep
+    bool beep_pending;  // bit 0 just turned on, not by Dan: mute it
+    bool beep_pressing; // short press in progress
+    uint32_t beep_ms;
+
+    // Dan's presses (from the sense line, ours masked out)
+    bool user_down;
+    uint32_t user_down_ms;
+    uint32_t user_last_ms; // last moment his press was seen
+    bool user_seen;
+
+    // output
+    bool press_out;
+    uint32_t release_ms;
+    bool sense_seen;
+
+    // settings / diagnostics
+    bool enabled, mute_beep;
+    bool fault_no_sense;
+    uint32_t drives, presses, beep_presses;
 } ctl_t;
 
-void ctl_init(ctl_t *c, uint32_t now, bool enabled);
-// After a mid-drive reset (OTA, watchdog): start latched as done, so a
-// manual re-enable is not undone. Clears like any drive once the status is
-// absent for STATUS_GONE_MS (counted from now if no frame ever arrives).
-void ctl_init_resumed(ctl_t *c, uint32_t now, bool enabled);
-// Status frame received within STATUS_FRESH_MS.
-bool ctl_status_fresh(const ctl_t *c, uint32_t now);
-// Call for every received 0x05C17002 data frame with DLC >= 2.
+void ctl_init(ctl_t *c, uint32_t now, bool enabled, bool mute_beep);
+// After a mid-drive software reset: start latched as done for this drive.
+void ctl_init_resumed(ctl_t *c, uint32_t now, bool enabled, bool mute_beep);
+// Every received 0x05C17002 data frame with DLC >= 2.
 void ctl_status_frame(ctl_t *c, uint32_t now, uint8_t b0, uint8_t b1);
-// Call periodically (~10 ms). btn_pressed = debounced sense state.
-// Returns whether the press output should be on.
+// Every ~10 ms. btn_pressed = debounced sense. Returns the press output.
 bool ctl_step(ctl_t *c, uint32_t now, bool btn_pressed, uint32_t btn_since_ms);
-// True while the sense line reflects our own press (gestures must ignore it).
+bool ctl_status_fresh(const ctl_t *c, uint32_t now);
+// True while the sense line shows our own press (not Dan's).
 bool ctl_sense_masked(const ctl_t *c, uint32_t now);
-const char *ctl_beep_name(beep_state_t s);
 const char *ctl_state_name(ctl_state_t s);
 const char *ctl_done_name(done_reason_t r);
 

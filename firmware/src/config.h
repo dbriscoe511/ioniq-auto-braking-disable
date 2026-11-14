@@ -32,22 +32,18 @@
 #define BTN_IDLE_MS 500       // button line must read released this long
 #define HOLD_MS 3000          // long press; > 2 s needed (Dan)
 #define HOLD_MAX_MS 3500      // hardware-timer failsafe release
-#define VERIFY_MS 3000        // after release, wait this long for 0x07
-#define RETRY_GAP_MS 2000     // extra wait before the one retry
+#define VERIFY_MS 3000        // after release, wait this long for 0x07, then retry
 #define MAX_ATTEMPTS 2
 #define SENSE_CHECK_MS 200    // our own press must show on the sense line by now
+#define SELF_MASK_MS 150      // sense line still settling after our release
+#define USER_LONG_MS 1500     // Dan's press this long = his auto-brake choice
 
 // ---- Beep mute ---------------------------------------------------------------
-// 0x05C17002 byte 0 bit 0 = parking warning sound active. Shifting into
-// reverse sets it (~0.2 s after the shift, in stage3_gear.log); a short press
-// toggles it. Mute it with a short press as soon as it turns on, unless Dan's
-// own press just turned it on.
-#define BEEP_STABLE_N 2          // frames with bit 0 set before acting
+// 0x05C17002 byte 0 bit 0 = parking warning sound on. Shifting into reverse
+// sets it (~0.2 s after the shift, stage3_gear.log); a short press toggles
+// it. One short press each time it turns on, unless Dan's press turned it on.
 #define BEEP_PRESS_MS 300        // short press (well under the 2 s long press)
-#define BEEP_VERIFY_MS 1500      // wait for bit 0 to clear
-#define BEEP_MAX_ATTEMPTS 2      // per beep-on episode
-#define BEEP_USER_WINDOW_MS 1000 // Dan pressed this recently -> his choice
-#define BEEP_SELF_WINDOW_MS 2000 // back on this soon after our release -> leave it
+#define BEEP_USER_WINDOW_MS 1000 // Dan pressed within this -> it was him
 
 // ---- Button sense (mV at GPIO3) ------------------------------------------
 // Released: 12.2-14.4 V -> ~2.6-3.1 V. Pressed: near 0 V (exact value
@@ -65,12 +61,13 @@
 #define GEST_GAP_MAX_MS 600   // release -> next press
 #define GEST_TOGGLE_COUNT 4   // toggle automation on/off (stored in flash)
 #define GEST_WIFI_COUNT 6     // open the Wi-Fi/OTA window
-#define GEST_MASK_AFTER_MS 500 // ignore the line this long after our press
 
 // ---- Wi-Fi / OTA ---------------------------------------------------------
-#define WIFI_BOOT_WINDOW_MS (60 * 1000)      // AP up after every power-on
-#define WIFI_GESTURE_WINDOW_MS (5 * 60 * 1000)
-#define WIFI_CLIENT_MAX_MS (15 * 60 * 1000)  // hard cap while a client stays
+// Off by default: an LDO drops ~9 V, so Wi-Fi (~80-120 mA) is 1-1.5 W of
+// heat in a closed console vs ~0.3 W idle. Up only on request (6 taps), or
+// once after an OTA so the new image can prove the update path still works.
+#define WIFI_GESTURE_WINDOW_MS (2 * 60 * 1000) // with no client connected
+#define WIFI_CLIENT_MAX_MS (10 * 60 * 1000)    // hard cap even with a client
 #define WIFI_AP_SSID_PREFIX "ps-disable-"
 #define WIFI_AP_CHANNEL 6
-#define MARK_VALID_AFTER_MS (30 * 1000)      // OTA rollback confirmation
+#define MARK_VALID_AFTER_MS (30 * 1000)        // OTA rollback confirmation
