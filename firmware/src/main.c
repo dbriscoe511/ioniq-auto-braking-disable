@@ -56,7 +56,8 @@ static bool press_cur;
 #define LATCH_MAGIC 0x50534430u
 static RTC_NOINIT_ATTR uint32_t rtc_latch;
 
-static bool recovery_ok; // AP + web server came up at boot
+static bool recovery_ok;    // AP + web server came up at boot (new image)
+static bool gesture_proven; // a 6-tap gesture was recognised since boot
 
 static bool ota_pending_verify(void) {
     esp_ota_img_states_t st;
@@ -286,14 +287,17 @@ static void control_task(void *arg) {
 
         rtc_latch = ctl.state == ST_DONE ? LATCH_MAGIC : 0;
 
-        // Gestures only while the car is talking: pin 5 with the car off is
-        // unmeasured, and the toggle is silent and persistent.
-        bool gmask = ctl_sense_masked(&ctl, now) || !ctl_status_fresh(&ctl, now);
-        switch (gest_step(&gest, now, btn, gmask)) {
-        case GEST_TOGGLE_ENABLE: set_enabled(!ctl.enabled, "button gesture"); break;
+        switch (gest_step(&gest, now, btn, ctl_sense_masked(&ctl, now))) {
+        case GEST_TOGGLE_ENABLE:
+            // Only with the car awake: pin 5 with the car off is unmeasured,
+            // and this toggle is silent and persistent.
+            if (ctl_status_fresh(&ctl, now)) set_enabled(!ctl.enabled, "button gesture");
+            break;
         case GEST_WIFI:
+            // Works with or without CAN: it's the way in when CAN is broken.
             ESP_LOGW(TAG, "Wi-Fi window opened by button gesture");
             wifi_ota_open(now, WIFI_GESTURE_WINDOW_MS);
+            gesture_proven = true;
             break;
         case GEST_NONE: break;
         }
@@ -309,7 +313,11 @@ static void control_task(void *arg) {
             last_state = ctl.state;
         }
 
-        if (pending_verify && now >= MARK_VALID_AFTER_MS && !ctl.press_out) {
+        // A new image is confirmed only once the way back in has been shown
+        // to work: AP up at boot, and a 6-tap gesture recognised. Until then
+        // the next reset or power cycle rolls back to the previous image.
+        if (pending_verify && now >= MARK_VALID_AFTER_MS && !ctl.press_out &&
+            (gesture_proven || !recovery_ok)) {
             if (recovery_ok) {
                 esp_ota_mark_app_valid_cancel_rollback();
                 pending_verify = false;

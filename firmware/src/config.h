@@ -36,14 +36,13 @@
 #define MAX_ATTEMPTS 2
 #define SENSE_CHECK_MS 200    // our own press must show on the sense line by now
 #define SELF_MASK_MS 150      // sense line still settling after our release
-#define USER_LONG_MS 1500     // Dan's press this long = his auto-brake choice
+#define USER_WINDOW_MS 1000   // a change this soon after Dan's press was his
 
 // ---- Beep mute ---------------------------------------------------------------
 // 0x05C17002 byte 0 bit 0 = parking warning sound on. Shifting into reverse
 // sets it (~0.2 s after the shift, stage3_gear.log); a short press toggles
 // it. One short press each time it turns on, unless Dan's press turned it on.
 #define BEEP_PRESS_MS 300        // short press (well under the 2 s long press)
-#define BEEP_USER_WINDOW_MS 1000 // Dan pressed within this -> it was him
 
 // ---- Button sense (mV at GPIO3) ------------------------------------------
 // Released: 12.2-14.4 V -> ~2.6-3.1 V. Pressed: near 0 V (exact value

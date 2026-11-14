@@ -48,6 +48,7 @@ static void new_drive(ctl_t *c, uint32_t now) {
     c->same_n = 0;
     c->attempts = 0;
     c->beep_pending = false;
+    c->user_brake = false;
     c->done_reason = DONE_NONE;
     enter(c, now, ST_WAIT_STATUS);
 }
@@ -64,13 +65,16 @@ void ctl_init_resumed(ctl_t *c, uint32_t now, bool enabled, bool mute_beep) {
     ctl_init(c, now, enabled, mute_beep);
     c->have_status = true; // run the "status gone" timer from now
     c->last_rx_ms = now;
+    c->b1 = 0;
+    c->b0 = 1; // beep state unknown: the first frame is not a rising edge
     c->drives = 1;
     finish(c, now, DONE_RESUMED);
 }
 
+// Dan pressed (a press that started while the car was awake) now or within
+// USER_WINDOW_MS: whatever the module reports changing now was him.
 static bool user_recent(const ctl_t *c, uint32_t now) {
-    return c->user_down ||
-           (c->user_seen && ELAPSED(now, c->user_last_ms) < BEEP_USER_WINDOW_MS);
+    return c->user_down || (c->user_seen && ELAPSED(now, c->user_last_ms) < USER_WINDOW_MS);
 }
 
 void ctl_status_frame(ctl_t *c, uint32_t now, uint8_t b0, uint8_t b1) {
@@ -79,7 +83,11 @@ void ctl_status_frame(ctl_t *c, uint32_t now, uint8_t b0, uint8_t b1) {
     if (beep && !was_beep) c->beep_pending = !user_recent(c, now); // Dan's -> leave it
     if (!beep) c->beep_pending = false;
 
-    c->same_n = (c->have_status && b1 == c->b1 && c->same_n < UINT16_MAX) ? c->same_n + 1 : 1;
+    bool same = c->have_status && b1 == c->b1;
+    // Auto-brake flipped under Dan's finger: his choice for this drive.
+    if (c->have_status && !same && user_recent(c, now)) c->user_brake = true;
+    if (!same) c->same_n = 1;
+    else if (c->same_n < UINT16_MAX) c->same_n++;
     c->have_status = true;
     c->last_rx_ms = now;
     c->b0 = b0;
@@ -100,17 +108,21 @@ bool ctl_sense_masked(const ctl_t *c, uint32_t now) {
     return c->press_out || ELAPSED(now, c->release_ms) < SELF_MASK_MS;
 }
 
+// Dan's presses: only ones that start while the car is awake (pin 5's level
+// with the car off, or a line already low at boot, is not a press).
 static void track_user(ctl_t *c, uint32_t now, bool btn) {
     if (ctl_sense_masked(c, now)) return;
-    if (btn && !c->user_down) c->user_down_ms = now;
-    c->user_down = btn;
-    if (btn) {
+    if (btn && !c->user_down && !c->user_ignore) {
+        if (fresh(c, now)) c->user_down = true;
+        else c->user_ignore = true; // low before the car woke: ignore till released
+    }
+    if (!btn) {
+        c->user_down = false;
+        c->user_ignore = false;
+    }
+    if (c->user_down) {
         c->user_seen = true;
         c->user_last_ms = now;
-        // Dan's long press: his call on auto-brake for the rest of the drive.
-        if (ELAPSED(now, c->user_down_ms) >= USER_LONG_MS && c->state != ST_WAIT_STATUS &&
-            c->state != ST_DONE)
-            finish(c, now, DONE_USER);
     }
 }
 
@@ -121,6 +133,8 @@ bool ctl_step(ctl_t *c, uint32_t now, bool btn, uint32_t btn_since_ms) {
     if (c->have_status && ELAPSED(now, c->last_rx_ms) > STATUS_GONE_MS) new_drive(c, now);
 
     track_user(c, now, btn);
+    if (c->user_brake && c->state != ST_WAIT_STATUS && c->state != ST_DONE)
+        finish(c, now, DONE_USER);
     bool btn_idle = !btn && ELAPSED(now, btn_since_ms) >= BTN_IDLE_MS;
 
     // ---- auto-brake, once per drive ----

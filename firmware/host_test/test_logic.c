@@ -41,6 +41,7 @@ typedef struct {
     int64_t beep_pending;
     int toggles, beep_toggles;
     bool finger; // Dan
+    bool sense_stuck_low; // ADC reads low, module unaffected (car-off level, glitch)
     // device under test
     ctl_t ctl;
     sense_t sense;
@@ -96,7 +97,7 @@ static void sim_run(sim_t *s, uint32_t *t, uint32_t end) {
             ctl_status_frame(&s->ctl, now, 0x2C | s->beep, s->b1);
 
         if (now % 10 == 0) {
-            bool pressed = sense_update(&s->sense, now, low ? 50 : 2700);
+            bool pressed = sense_update(&s->sense, now, (low || s->sense_stuck_low) ? 50 : 2700);
             bool was = s->out;
             s->out = ctl_step(&s->ctl, now, pressed, s->sense.since_ms);
             if (s->out && !was) {
@@ -242,13 +243,39 @@ static void test_finger_on_button(void) {
     s.powered = true;
     sim_run(&s, &t, SETTLE_MS - 500);
     s.finger = true;
-    sim_run(&s, &t, t + 1200); // armed during this, 1.2 s < USER_LONG_MS
+    sim_run(&s, &t, t + 1200); // armed during this; too short to toggle anything
     CHECK(s.press_edges == 0, "pressed under his finger");
     s.finger = false;
     sim_run(&s, &t, t + BTN_IDLE_MS - 100);
     CHECK(s.press_edges == 0, "pressed before idle");
     sim_run(&s, &t, t + 15000);
     CHECK(s.press_edges == 1 && s.b1 == 0x07, "presses=%d b1=%02x", s.press_edges, s.b1);
+}
+
+static void test_line_low_at_wake(void) {
+    printf("sense line low from boot until 2 s after the car wakes: not Dan, presses\n");
+    sim_t s; uint32_t t = 0;
+    sim_init(&s, t, 0x09, true);
+    s.sense_stuck_low = true;
+    sim_run(&s, &t, 1000);
+    s.powered = true;
+    sim_run(&s, &t, 3000);
+    s.sense_stuck_low = false;
+    sim_run(&s, &t, 25000);
+    CHECK(s.press_edges == 1 && s.b1 == 0x07, "presses=%d b1=%02x", s.press_edges, s.b1);
+    DONE_IS(s, DONE_TURNED_OFF);
+}
+
+static void test_dan_hold_too_short(void) {
+    printf("Dan holds 1.7 s during settling (no toggle): still presses\n");
+    sim_t s; uint32_t t = 0;
+    sim_init(&s, t, 0x09, true);
+    s.powered = true;
+    sim_run(&s, &t, 1000);
+    finger_tap(&s, &t, 1700, 100);
+    sim_run(&s, &t, 25000);
+    CHECK(s.press_edges == 1 && s.b1 == 0x07, "presses=%d b1=%02x", s.press_edges, s.b1);
+    DONE_IS(s, DONE_TURNED_OFF);
 }
 
 static void test_no_sense_fault(void) {
@@ -519,6 +546,8 @@ int main(int argc, char **argv) {
     test_retry_and_give_up();
     test_module_timing_variants();
     test_finger_on_button();
+    test_line_low_at_wake();
+    test_dan_hold_too_short();
     test_no_sense_fault();
     test_status_lost_while_pressing();
     test_resumed();

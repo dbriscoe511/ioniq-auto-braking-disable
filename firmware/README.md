@@ -31,8 +31,10 @@ and the recorded car captures. Not yet run on hardware.**
   soon as `07` shows).
 - **verify:** `07` within 3 s → done. Otherwise back to armed for **one** retry,
   then give up.
-- **You win:** if you long-press the button yourself (≥ 1.5 s) at any point in
-  the drive, it stands down until the next drive. Short taps (the beep) don't count.
+- **You win:** if auto-brake changes while you're pressing the button, or
+  within 1 s after, that was you, so it stands down until the next drive.
+  Your press only counts if it started with the car awake; a line already low
+  at wake-up isn't you. Holding too briefly to toggle it changes nothing.
 - A reset mid-drive (OTA reboot, watchdog) keeps the "done" latch in RTC
   memory. A brownout or power loss doesn't.
 
@@ -41,8 +43,8 @@ and the recorded car captures. Not yet run on hardware.**
 When byte 0 bit 0 turns on, it taps the button for 300 ms, once. A short
 press only toggles the sound; auto-brake isn't affected.
 
-- **You win:** if your own press came within 1 s before it turned on, you
-  turned it on, so it's left alone (until it next goes off and on).
+- **You win:** if it turned on during your press or within 1 s after, you
+  turned it on, so it's left alone until it next goes off and on.
 - It only taps right after the bit turns on, so it can't turn the sound on.
   If the tap doesn't take, it stays on; there's no retry, so it can never fight you.
 - It waits for a long press in progress and for 0.5 s of button idle.
@@ -58,12 +60,10 @@ press only toggles the sound; auto-brake isn't affected.
 
 ## Button gestures
 
-Counted only while the car is awake (status on the bus).
-
 | Gesture | Effect |
 |---|---|
-| **4 quick taps** (each ≤ 0.6 s, gaps ≤ 0.6 s) | Automation on/off (both jobs; saved in flash) |
-| **6 quick taps** | Turn Wi-Fi on for an update (below) |
+| **4 quick taps** (each ≤ 0.6 s, gaps ≤ 0.6 s) | Automation on/off (both jobs; saved in flash). Only while the car is awake. |
+| **6 quick taps** | Turn Wi-Fi on (below). Works with or without CAN, e.g. on the bench, or when CAN reception is broken. |
 
 Even counts leave the beep where it was. Taps more than 0.6 s apart, or any
 press longer than 0.6 s, never add up to a gesture.
@@ -77,9 +77,9 @@ closed console. So:
 - **Wi-Fi is off by default.** 6 taps turn it on. It turns itself off after
   2 min with nobody connected, and after 10 min regardless.
 - **Bluetooth is compiled out**, and the CPU runs at 80 MHz.
-- **Recovery now depends on the gesture.** If a bad build broke the button
-  sense or the gesture code, the only way back is USB, which means opening
-  the console. Rollback (below) guards against that for OTA updates.
+- **The way in is the 6-tap gesture.** A build that breaks the button sense
+  or gesture code would leave USB as the only way back (opening the console).
+  Rollback (below) guards against that for OTA updates.
 
 ## Update over Wi-Fi
 
@@ -88,9 +88,12 @@ closed console. So:
    `http://192.168.4.1/`. It shows live status, the two switches and a firmware upload.
    Or from a terminal:
    `curl --data-binary @.pio/build/supermini/firmware.bin http://192.168.4.1/ota`
-3. **Rollback:** the new image starts Wi-Fi itself on first boot. It is
-   confirmed only if that works and it runs for 30 s. Otherwise the
-   bootloader goes back to the old image.
+3. **Confirm it:** the new image starts Wi-Fi itself after the reboot.
+   Then **do the 6-tap gesture once.** It's confirmed only when its Wi-Fi came
+   up, it has run 30 s, *and* it recognised your 6 taps, which proves you can
+   get back in. Until then the next power cycle or reset (e.g. turning the car
+   off) goes back to the old image. If its Wi-Fi fails to start, it rolls
+   back immediately.
 
 Uploads are refused while the board is pressing, the reboot waits for a press
 to finish, and a stalled upload is dropped after 30 s.

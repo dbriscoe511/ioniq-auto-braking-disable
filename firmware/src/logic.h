@@ -23,8 +23,8 @@ bool sense_update(sense_t *s, uint32_t now, int mv);
 //  - beep: each time byte 0 bit 0 turns on (reverse), one short press.
 // Dan's own presses are seen directly on the sense line, so there's no
 // guessing about who changed what:
-//  - a long press by Dan during a drive -> leave auto-brake alone this drive
-//  - the beep turning on right after Dan's press -> leave that beep on
+//  - auto-brake flips during (or within 1 s of) Dan's press -> leave it this drive
+//  - the beep turns on during (or within 1 s of) Dan's press -> leave that beep on
 typedef enum {
     ST_WAIT_STATUS, // no 0x05C17002 this drive
     ST_SETTLING,    // status present, waiting SETTLE_MS
@@ -40,7 +40,7 @@ typedef enum {
     DONE_TURNED_OFF,  // our press worked
     DONE_GAVE_UP,     // MAX_ATTEMPTS presses, still 0x09
     DONE_DISABLED,    // automation switched off
-    DONE_USER,        // Dan long-pressed the button himself this drive
+    DONE_USER,        // Dan changed auto-brake himself (button) this drive
     DONE_RESUMED,     // rebooted mid-drive after being done
 } done_reason_t;
 
@@ -63,10 +63,11 @@ typedef struct {
     uint32_t beep_ms;
 
     // Dan's presses (from the sense line, ours masked out)
-    bool user_down;
-    uint32_t user_down_ms;
+    bool user_down;        // his press in progress (started with the car awake)
+    bool user_ignore;      // line was low before the car woke; wait for release
     uint32_t user_last_ms; // last moment his press was seen
     bool user_seen;
+    bool user_brake;       // auto-brake flipped during/just after his press
 
     // output
     bool press_out;
