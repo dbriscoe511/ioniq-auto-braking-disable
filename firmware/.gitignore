@@ -1,0 +1,4 @@
+.pio/
+sdkconfig.supermini
+sdkconfig.supermini.old
+src/secrets.h
