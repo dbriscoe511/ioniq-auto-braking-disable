@@ -22,7 +22,7 @@
 
 // The status frame arrives every 100 ms in every car capture (no gaps).
 #define STATUS_FRESH_MS 300   // last frame must be newer than this to act
-#define STATUS_STABLE_N 10    // consecutive identical byte-1 frames (~1 s)
+#define STATUS_STABLE_N 5     // consecutive identical byte-1 frames (~0.5 s)
 // With the car off the frame keeps coming, with byte 1 = 0x00: frames with
 // byte 1 other than 07/09 are ignored, so they count as absence too.
 #define STATUS_GONE_MS 3000   // absence that counts as "car off" -> new drive
@@ -30,7 +30,7 @@
 // ---- Timing (ms) ----------------------------------------------------------
 // GUESS: nothing measured yet on how soon after start-up the parking module
 // accepts a long press. The verify-and-retry covers a premature press.
-#define SETTLE_MS 4000        // after status first appears in a drive
+#define SETTLE_MS 500         // after status first appears; car took a press at 4 s (2026-11-16), trying 0.5 s
 #define BTN_IDLE_MS 500       // button line must read released this long
 #define HOLD_MS 3000          // long press; > 2 s needed (Dan)
 #define HOLD_MAX_MS 3500      // hardware-timer failsafe release
@@ -44,7 +44,7 @@
 // 0x05C17002 byte 0 bit 0 = parking warning sound on. Shifting into reverse
 // sets it (~0.2 s after the shift, stage3_gear.log); a short press toggles
 // it. One short press each time it turns on, unless Dan's press turned it on.
-#define BEEP_PRESS_MS 300        // short press (well under the 2 s long press)
+#define BEEP_PRESS_MS 100        // short press; 300 ms worked (2026-11-16), trying 100
 
 // ---- Button sense (mV at GPIO3) ------------------------------------------
 // Released: 12.2-14.4 V -> ~2.6-3.1 V. Pressed: near 0 V (exact value

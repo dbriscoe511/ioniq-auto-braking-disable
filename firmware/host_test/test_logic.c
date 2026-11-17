@@ -215,15 +215,17 @@ static void test_already_off(void) {
 }
 
 static void test_dan_turns_on_early(void) {
-    printf("start at 0x07, Dan long-presses it on during settling: left on\n");
-    sim_t s; uint32_t t = 0;
-    sim_init(&s, t, 0x07, true);
-    s.powered = true;
-    sim_run(&s, &t, 1000);
-    finger_tap(&s, &t, 2500, 100);
-    sim_run(&s, &t, t + 30000);
-    CHECK(s.press_edges == 0 && s.b1 == 0x09, "presses=%d b1=%02x", s.press_edges, s.b1);
-    DONE_IS(s, DONE_USER);
+    printf("start at 0x07, Dan long-presses it on right away: left on\n");
+    for (uint32_t at = 200; at <= 3000; at += 700) {
+        sim_t s; uint32_t t = 0;
+        sim_init(&s, t, 0x07, true);
+        s.powered = true;
+        sim_run(&s, &t, at);
+        finger_tap(&s, &t, 2500, 100);
+        sim_run(&s, &t, t + 30000);
+        CHECK(s.press_edges == 0 && s.b1 == 0x09, "at %u: presses=%d b1=%02x", at, s.press_edges, s.b1);
+        CHECK(s.ctl.state == ST_DONE, "at %u: state=%s", at, ctl_state_name(s.ctl.state));
+    }
 }
 
 static void test_unknown_disabled_nostatus(void) {
