@@ -458,11 +458,11 @@ def build():
 
     # ---------------- Notes ----------------------------------------------
     s.note("1. BTN = CON1-5, Parking Safety switch (~200R to GND in the panel), 12.2 V idle. "
-           "Q1 + R3 emulate a press.\n"
+           "Q1 + R3 emulate a press (in car: GPIO3 ~2.5 V released, ~0.1 V pressed).\n"
            "2. CAN is silent by default: R6 holds SLNT high and firmware keeps it high "
            "(listen-only). Set the CAN Pal termination switch OFF.\n"
            "3. GPIO2/8/9 are strapping pins (GPIO8 = LED): leave unconnected.",
-           15.24, 140.97, 142.24, 8.89)
+           15.24, 140.97, 142.24, 11.43)
     return s
 
 

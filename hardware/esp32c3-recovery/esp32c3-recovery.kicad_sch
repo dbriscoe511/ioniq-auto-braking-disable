@@ -3691,10 +3691,10 @@
 		)
 		(uuid "6b5597e1-92be-5757-a951-d3f9a3b7a987")
 	)
-	(text_box "1. BTN = CON1-5, Parking Safety switch (~200R to GND in the panel), 12.2 V idle. Q1 + R3 emulate a press.\n2. CAN is silent by default: R6 holds SLNT high and firmware keeps it high (listen-only). Set the CAN Pal termination switch OFF.\n3. GPIO2/8/9 are strapping pins (GPIO8 = LED): leave unconnected."
+	(text_box "1. BTN = CON1-5, Parking Safety switch (~200R to GND in the panel), 12.2 V idle. Q1 + R3 emulate a press (in car: GPIO3 ~2.5 V released, ~0.1 V pressed).\n2. CAN is silent by default: R6 holds SLNT high and firmware keeps it high (listen-only). Set the CAN Pal termination switch OFF.\n3. GPIO2/8/9 are strapping pins (GPIO8 = LED): leave unconnected."
 		(exclude_from_sim no)
 		(at 15.24 140.97 0)
-		(size 142.24 8.89)
+		(size 142.24 11.43)
 		(margins 1.27 1.27 1.27 1.27
 		)
 		(stroke
