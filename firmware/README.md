@@ -7,8 +7,10 @@ ESP-IDF firmware for the add-on board in `hardware/esp32c3-recovery/`
 - **Auto-brake:** once per drive, a long press if the car reports it on.
 - **Reverse beep:** a short press each time reverse turns the warning sound on.
 
-**Status: builds, and passes host tests against a simulated parking module
-and the recorded car captures. Not yet run on hardware.**
+**Status: working in the car (2026-11-16).** Auto-brake goes off about 2.6 s
+after start (0.5 s wait + the module's ~2.1 s hold); the reverse beep is muted
+with a 100 ms tap about 0.2 s after it turns on. Also passes host tests against
+a simulated parking module and the recorded car captures.
 
 ## Inputs
 
@@ -22,11 +24,12 @@ and the recorded car captures. Not yet run on hardware.**
 
 ## Auto-brake (once per drive)
 
-`wait_status → settling (4 s) → armed → pressing → verify → done`
+`wait_status → settling (0.5 s) → armed → pressing → verify → done`
 
-- A **drive** starts when `0x05C17002` appears and ends when it has been gone
-  for 3 s. Power-on alone never presses (the panel is also powered with the car off).
-- **armed:** reads `07` → done. Reads `09` for 1 s and the button has been
+- A **drive** starts when `0x05C17002` shows auto-brake `07`/`09`, and ends
+  after 3 s without that. With the car off the frame keeps coming at 10 Hz with
+  byte 1 = `00` (and pin 5 reads 0 V), so `00` counts as car off.
+- **armed:** reads `07` → done. Reads `09` for 0.5 s and the button has been
   released ≥ 0.5 s → long press (GPIO10 high, up to 3 s; released early as
   soon as `07` shows).
 - **verify:** `07` within 3 s → done. Otherwise back to armed for **one** retry,
@@ -40,7 +43,7 @@ and the recorded car captures. Not yet run on hardware.**
 
 ## Reverse beep (every time)
 
-When byte 0 bit 0 turns on, it taps the button for 300 ms, once. A short
+When byte 0 bit 0 turns on, it taps the button for 100 ms, once. A short
 press only toggles the sound; auto-brake isn't affected.
 
 - **You win:** if it turned on during your press or within 1 s after, you
@@ -48,7 +51,7 @@ press only toggles the sound; auto-brake isn't affected.
 - It only taps right after the bit turns on, so it can't turn the sound on.
   If the tap doesn't take, it stays on; there's no retry, so it can never fight you.
 - It waits for a long press in progress and for 0.5 s of button idle.
-  Otherwise it taps about 0.1 s after the bit changes.
+  Otherwise it taps on the frame where the bit turns on.
 - Toggle on the web page ("mute reverse beep", default on, saved in flash).
 
 ## Safety backstops
@@ -87,7 +90,8 @@ While the window is open the board is reachable two ways (same page):
   IP; the status JSON shows it as `home_ip`. At home that's the easy route.
 
 The page has live status, automation on/off, mute/keep the reverse beep, and
-a firmware upload. Or upload from a terminal:
+a firmware upload. `http://<ip>/log` lists the last 160 events (status byte
+changes, state changes, presses, button edges) since power-on. Or upload from a terminal:
 `curl --data-binary @.pio/build/supermini/firmware.bin http://<ip>/ota`
 
 **Rollback:** a new image is kept once it has run 30 s with its Wi-Fi up.
@@ -136,13 +140,12 @@ bootloader.
 | 7 | CAN Pal RX |
 | 10 | Press output (NPN pulls CON1-5 to GND via 200 Ω) |
 
-## Unmeasured, to check in the car (tunables in `src/config.h`)
+## Measured in the car (2026-11-16)
 
-- **Drive boundary.** Every capture starts with `0x05C17002` already present.
-  If it keeps running through a stop and restart with the panel powered,
-  that drive gets no auto-brake press. To find out, log car off → start → off → restart.
-- **`SETTLE_MS` = 4 s.** How soon the module accepts a long press after
-  start-up is a guess; the retry covers an early one.
-- **Whether a 300 ms tap counts as a short press**, and how fast the beep bit follows.
-- **Pressed voltage on pin 5.** Thresholds assume near 0 V. Check `sense_mv`
-  on the status page while holding the button.
+- **Car off:** `0x05C17002` keeps arriving with byte 1 = `00`; pin 5 reads 0 V.
+- **Start:** the module accepted a long press 0.5 s after the first `09`
+  frame and reported `07` after a 2.1 s hold.
+- **Beep:** 300 ms and 100 ms taps both mute it; the bit clears ~0.1 s after release.
+- **Pressed pin 5:** ~0.1 V at GPIO3 with our NPN on; released ~2.5 V.
+
+Still unmeasured: Dan's own pressed level (thresholds assume near 0 V).
