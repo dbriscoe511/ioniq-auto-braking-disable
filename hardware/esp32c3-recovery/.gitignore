@@ -1,0 +1,8 @@
+*.kicad_prl
+*-backups/
+~*.lck
+fp-info-cache
+out/erc.rpt
+out/netlist.net
+.history/
+__pycache__/
