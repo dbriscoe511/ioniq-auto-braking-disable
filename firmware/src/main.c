@@ -5,6 +5,7 @@
 // (CON1 pin 5) for up to 3 s and checks that it reads off (0x07).
 // Decision logic lives in logic.c; this file is the hardware glue.
 #include <inttypes.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -58,6 +59,50 @@ static RTC_NOINIT_ATTR uint32_t rtc_latch;
 
 static bool recovery_ok; // AP + web server came up at boot
 
+// ---- Event log (RAM, served at /log) ----------------------------------------
+// The last EV_N events: status byte changes, state changes, presses, button
+// edges. Lost on power-off; read it in the Wi-Fi window.
+#define EV_N 160
+#define EV_LEN 56
+static struct { uint32_t t; char msg[EV_LEN]; } ev_ring[EV_N];
+static uint32_t ev_count;
+
+static uint32_t now_ms(void);
+
+static void ev(const char *fmt, ...) {
+    char m[EV_LEN];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(m, sizeof m, fmt, ap);
+    va_end(ap);
+    uint32_t t = now_ms();
+    ESP_LOGI(TAG, "%s", m);
+    taskENTER_CRITICAL(&lock);
+    uint32_t i = ev_count++ % EV_N;
+    ev_ring[i].t = t;
+    memcpy(ev_ring[i].msg, m, sizeof m);
+    taskEXIT_CRITICAL(&lock);
+}
+
+size_t app_log_text(char *buf, size_t len) {
+    size_t n = 0;
+    taskENTER_CRITICAL(&lock);
+    uint32_t count = ev_count;
+    taskEXIT_CRITICAL(&lock);
+    uint32_t first = count > EV_N ? count - EV_N : 0;
+    for (uint32_t k = first; k < count && n + EV_LEN + 16 < len; k++) {
+        taskENTER_CRITICAL(&lock);
+        uint32_t t = ev_ring[k % EV_N].t;
+        char m[EV_LEN];
+        memcpy(m, ev_ring[k % EV_N].msg, sizeof m);
+        taskEXIT_CRITICAL(&lock);
+        int w = snprintf(buf + n, len - n, "%7" PRIu32 ".%03" PRIu32 " %s\n", t / 1000, t % 1000, m);
+        if (w < 0) break;
+        n += (size_t)w < len - n ? (size_t)w : len - n - 1;
+    }
+    return n;
+}
+
 static bool ota_pending_verify(void) {
     esp_ota_img_states_t st;
     return esp_ota_get_state_partition(esp_ota_get_running_partition(), &st) == ESP_OK &&
@@ -103,14 +148,14 @@ static void failsafe_cb(void *arg) {
 static void press_set(bool on) {
     if (on && !press_cur) {
         gpio_set_level(PIN_PRESS, 1);
-        if (ctl.beep_pressing) ESP_LOGI(TAG, "beep on: short press to mute");
         esp_timer_stop(failsafe_timer); // ok if not running
         ESP_ERROR_CHECK(esp_timer_start_once(failsafe_timer, HOLD_MAX_MS * 1000ULL));
-        ESP_LOGI(TAG, "press");
+        if (ctl.beep_pressing) ev("press (beep tap)");
+        else ev("press (long, attempt %u)", ctl.attempts);
     } else if (!on && press_cur) {
         gpio_set_level(PIN_PRESS, 0);
         esp_timer_stop(failsafe_timer);
-        ESP_LOGI(TAG, "release");
+        ev("release");
     }
     press_cur = on;
 }
@@ -136,11 +181,17 @@ static void can_init(void) {
 }
 
 static uint32_t rx_frames;
+static int last_b0 = -1, last_b1 = -1;
 
 static void can_drain(uint32_t now) {
     twai_message_t m;
     while (twai_receive(&m, 0) == ESP_OK) {
         if (!m.extd || m.rtr || m.identifier != STATUS_ID || m.data_length_code < 2) continue;
+        if (rx_frames == 0) ev("first status frame %02X %02X", m.data[0], m.data[1]);
+        else if (m.data[0] != last_b0 || m.data[1] != last_b1)
+            ev("status %02X %02X -> %02X %02X", last_b0, last_b1, m.data[0], m.data[1]);
+        last_b0 = m.data[0];
+        last_b1 = m.data[1];
         rx_frames++;
         ctl_status_frame(&ctl, now, m.data[0], m.data[1]);
     }
@@ -198,8 +249,7 @@ static void save_enabled(bool on) { save_flag("enabled", on); }
 static void set_enabled(bool on, const char *why) {
     ctl.enabled = on;
     save_enabled(on);
-    ESP_LOGW(TAG, "automation %s (%s); takes effect next drive",
-             on ? "ENABLED" : "DISABLED", why);
+    ev("automation %s (%s)", on ? "ENABLED" : "DISABLED", why);
 }
 
 // ---- Called from the HTTP task --------------------------------------------
@@ -268,7 +318,11 @@ static void control_task(void *arg) {
 
         can_drain(now);
         int mv = sense_read_mv();
+        bool was_btn = sense.pressed;
         bool btn = mv >= 0 ? sense_update(&sense, now, mv) : sense.pressed;
+        if (btn != was_btn)
+            ev("button %s (%d mV)%s", btn ? "down" : "up", mv,
+               ctl_sense_masked(&ctl, now) ? " ours" : "");
 
         int req = web_enable_req;
         if (req >= 0) {
@@ -291,11 +345,12 @@ static void control_task(void *arg) {
         case GEST_TOGGLE_ENABLE:
             // Only with the car awake: pin 5 with the car off is unmeasured,
             // and this toggle is silent and persistent.
+            ev("gesture: 4 taps%s", ctl_status_fresh(&ctl, now) ? "" : " (ignored, car asleep)");
             if (ctl_status_fresh(&ctl, now)) set_enabled(!ctl.enabled, "button gesture");
             break;
         case GEST_WIFI:
             // Works with or without CAN: it's the way in when CAN is broken.
-            ESP_LOGW(TAG, "Wi-Fi window opened by button gesture");
+            ev("gesture: 6 taps, Wi-Fi open");
             wifi_ota_open(now, WIFI_GESTURE_WINDOW_MS);
             break;
         case GEST_NONE: break;
@@ -304,9 +359,8 @@ static void control_task(void *arg) {
         if (!ctl.press_out) wifi_ota_tick(now); // never stall mid-press
 
         if (ctl.state != last_state) {
-            ESP_LOGI(TAG, "%s -> %s (b1=%02X, attempt %u, %s)", ctl_state_name(last_state),
-                     ctl_state_name(ctl.state), ctl.b1, ctl.attempts,
-                     ctl_done_name(ctl.done_reason));
+            ev("%s -> %s (b1=%02X, try %u, %s)", ctl_state_name(last_state),
+               ctl_state_name(ctl.state), ctl.b1, ctl.attempts, ctl_done_name(ctl.done_reason));
             if (ctl.fault_no_sense)
                 ESP_LOGW(TAG, "press did not pull the button line low: check wiring");
             last_state = ctl.state;

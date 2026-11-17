@@ -78,6 +78,10 @@ static bool user_recent(const ctl_t *c, uint32_t now) {
 }
 
 void ctl_status_frame(ctl_t *c, uint32_t now, uint8_t b0, uint8_t b1) {
+    // With the car off the frame keeps coming at 10 Hz but byte 1 reads 0x00
+    // (car, 2026-11-16). Only 07/09 mean the module is up; anything else is
+    // treated as no frame, so STATUS_GONE_MS of it ends the drive.
+    if (b1 != STATUS_ON && b1 != STATUS_OFF) return;
     bool beep = b0 & 1;
     bool was_beep = c->have_status && (c->b0 & 1);
     if (beep && !was_beep) c->beep_pending = !user_recent(c, now); // Dan's -> leave it
@@ -129,7 +133,7 @@ static void track_user(ctl_t *c, uint32_t now, bool btn) {
 bool ctl_step(ctl_t *c, uint32_t now, bool btn, uint32_t btn_since_ms) {
     bool was_out = c->press_out;
 
-    // Status gone: car off. Whatever comes next is a new drive.
+    // Status gone (or byte 1 not 07/09): car off. Whatever comes next is a new drive.
     if (c->have_status && ELAPSED(now, c->last_rx_ms) > STATUS_GONE_MS) new_drive(c, now);
 
     track_user(c, now, btn);

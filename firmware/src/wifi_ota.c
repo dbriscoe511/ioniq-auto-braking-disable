@@ -87,6 +87,14 @@ static esp_err_t h_status(httpd_req_t *req) {
     return httpd_resp_send(req, buf, n);
 }
 
+static esp_err_t h_log(httpd_req_t *req) {
+    touch();
+    static char buf[12 * 1024]; // one server task: a static buffer is safe
+    size_t n = app_log_text(buf, sizeof buf);
+    httpd_resp_set_type(req, "text/plain");
+    return httpd_resp_send(req, buf, n);
+}
+
 static esp_err_t h_enable(httpd_req_t *req) {
     touch();
     char q[32], v[4];
@@ -173,6 +181,7 @@ static bool server_start(void) {
     const httpd_uri_t uris[] = {
         {.uri = "/", .method = HTTP_GET, .handler = h_root},
         {.uri = "/status", .method = HTTP_GET, .handler = h_status},
+        {.uri = "/log", .method = HTTP_GET, .handler = h_log},
         {.uri = "/enable", .method = HTTP_POST, .handler = h_enable},
         {.uri = "/ota", .method = HTTP_POST, .handler = h_ota},
         {.uri = "/mute", .method = HTTP_POST, .handler = h_mute},

@@ -23,6 +23,8 @@
 // The status frame arrives every 100 ms in every car capture (no gaps).
 #define STATUS_FRESH_MS 300   // last frame must be newer than this to act
 #define STATUS_STABLE_N 10    // consecutive identical byte-1 frames (~1 s)
+// With the car off the frame keeps coming, with byte 1 = 0x00: frames with
+// byte 1 other than 07/09 are ignored, so they count as absence too.
 #define STATUS_GONE_MS 3000   // absence that counts as "car off" -> new drive
 
 // ---- Timing (ms) ----------------------------------------------------------

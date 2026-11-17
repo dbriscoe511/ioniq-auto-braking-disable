@@ -42,6 +42,9 @@ typedef struct {
     int toggles, beep_toggles;
     bool finger; // Dan
     bool sense_stuck_low; // ADC reads low, module unaffected (car-off level, glitch)
+    bool off_frames; // car off: frames keep coming with byte 1 = 00, pin 5 at 0 V
+    uint32_t line_back_ms; // after power returns, pin 5 stays at 0 V this long
+    int64_t powered_at;
     // device under test
     ctl_t ctl;
     sense_t sense;
@@ -57,6 +60,7 @@ static void sim_init(sim_t *s, uint32_t t, uint8_t b1, bool enabled) {
     s->b1 = b1;
     s->toggle_after_ms = 2000;
     s->beep_pending = -1;
+    s->powered_at = -1;
     ctl_init(&s->ctl, t, enabled, true);
     sense_init(&s->sense, t);
     gest_init(&s->gest);
@@ -93,11 +97,18 @@ static void sim_run(sim_t *s, uint32_t *t, uint32_t end) {
             s->beep_toggles++;
             s->beep_pending = -1;
         }
-        if (s->powered && now % 100 == 0)
-            ctl_status_frame(&s->ctl, now, 0x2C | s->beep, s->b1);
+        if (s->powered && s->powered_at < 0) s->powered_at = now;
+        if (!s->powered) s->powered_at = -1;
+        if (now % 100 == 0) {
+            if (s->powered) ctl_status_frame(&s->ctl, now, 0x2C | s->beep, s->b1);
+            else if (s->off_frames) ctl_status_frame(&s->ctl, now, 0x2C, 0x00);
+        }
 
         if (now % 10 == 0) {
-            bool pressed = sense_update(&s->sense, now, (low || s->sense_stuck_low) ? 50 : 2700);
+            bool line_dead = s->off_frames &&
+                (!s->powered || (uint32_t)(now - s->powered_at) < s->line_back_ms);
+            bool pressed = sense_update(&s->sense, now,
+                                        (low || s->sense_stuck_low || line_dead) ? 50 : 2700);
             bool was = s->out;
             s->out = ctl_step(&s->ctl, now, pressed, s->sense.since_ms);
             if (s->out && !was) {
@@ -161,6 +172,38 @@ static void test_normal_start(void) {
           s.press_edges, s.b1, s.ctl.drives);
 }
 
+// Car 2026-11-16: with the car off the frame keeps coming with byte 1 = 00
+// and pin 5 reads 0 V; on restart the module comes back at 09.
+static void test_car_off_frames_continue(void) {
+    printf("car off with frames still coming (byte 1 = 00): next start presses again\n");
+    sim_t s; uint32_t t = 1000;
+    sim_init(&s, t, 0x09, true);
+    s.off_frames = true;
+    s.line_back_ms = 300;
+    s.powered = true;
+    sim_run(&s, &t, t + 20000);
+    CHECK(s.press_edges == 1 && s.b1 == 0x07, "first drive presses=%d", s.press_edges);
+    s.powered = false;
+    sim_run(&s, &t, t + 40000);
+    CHECK(s.press_edges == 1 && s.ctl.state == ST_WAIT_STATUS, "while off: presses=%d state=%s",
+          s.press_edges, ctl_state_name(s.ctl.state));
+    s.b1 = 0x09; // module resets to on at start
+    s.powered = true;
+    sim_run(&s, &t, t + 20000);
+    CHECK(s.press_edges == 2 && s.b1 == 0x07 && s.ctl.drives == 2, "restart presses=%d b1=%02x drives=%u",
+          s.press_edges, s.b1, s.ctl.drives);
+    DONE_IS(s, DONE_TURNED_OFF);
+    CHECK(s.beep_edges == 0 && s.gestures[GEST_WIFI] == 0 && s.gestures[GEST_TOGGLE_ENABLE] == 0,
+          "beep=%d gestures", s.beep_edges);
+
+    printf("  ...brief 00 (< 3 s) mid-drive: same drive\n");
+    s.powered = false;
+    sim_run(&s, &t, t + 1500);
+    s.powered = true;
+    sim_run(&s, &t, t + 20000);
+    CHECK(s.press_edges == 2, "presses=%d", s.press_edges);
+}
+
 static void test_already_off(void) {
     printf("start at 0x07: never presses\n");
     sim_t s; uint32_t t = 0;
@@ -189,7 +232,7 @@ static void test_unknown_disabled_nostatus(void) {
     sim_init(&s, t, 0x05, true);
     s.powered = true;
     sim_run(&s, &t, 30000);
-    CHECK(s.press_edges == 0 && s.ctl.state == ST_ARMED, "unknown: presses=%d", s.press_edges);
+    CHECK(s.press_edges == 0 && s.ctl.state == ST_WAIT_STATUS, "unknown: presses=%d", s.press_edges);
     sim_init(&s, t = 0, 0x09, false);
     s.powered = true;
     sim_run(&s, &t, 30000);
@@ -540,6 +583,7 @@ static void test_replays(const char *dir) {
 
 int main(int argc, char **argv) {
     test_normal_start();
+    test_car_off_frames_continue();
     test_already_off();
     test_dan_turns_on_early();
     test_unknown_disabled_nostatus();
