@@ -1,17 +1,19 @@
 // Parking Safety auto-disable: pins and tunables.
 //
-// Pin map follows the KiCad schematic on branch
-// t3/esp32c3-recovery-kicad-schematic (commit a5637be,
-// hardware/esp32c3-recovery/). Check it again if the schematic changes.
+// Pin map follows the KiCad schematic in hardware/esp32c3-recovery/ (rev C:
+// JLC-placed ESP32-C3-WROOM-02, on-board TJA1051T/3, same GPIOs as rev A/B). Check it again if
+// the schematic changes.
 #pragma once
 
-// ---- Pins (ESP32-C3 SuperMini) ------------------------------------------
-#define PIN_PRESS 10     // 1k -> 2N3904 base; high = pull CON1-5 to GND via 200R
+// ---- Pins (ESP32-C3-WROOM-02 on the rev C board; same GPIOs on a SuperMini) ----
+#define PIN_PRESS 10     // 1k -> NPN (MMBT3904) base; high = pull CON1-5 to GND via 200R
 #define PIN_SENSE_ADC 3  // CON1-5 through 100k/27k divider (ADC1 channel 3)
-#define PIN_CAN_SLNT 5   // CAN Pal S pin; high = transmitter off (4.7k pull-up)
-#define PIN_CAN_TX 6     // CAN Pal TX; never used (listen-only)
-#define PIN_CAN_RX 7     // CAN Pal RX
-// GPIO2/8/9 are strapping pins (GPIO8 = LED): unused. GPIO20/21 = UART0.
+#define PIN_CAN_SLNT 5   // TJA1051 S pin; high = transmitter off (4.7k pull-up)
+#define PIN_CAN_TX 6     // TJA1051 TXD; never used (listen-only)
+#define PIN_CAN_RX 7     // TJA1051 RXD
+#define PIN_LED 1        // D3 red LED via R7 1k; high = on (board LED, not yet used)
+// GPIO2/8/9 are strapping pins (10k pull-ups, SW1 BOOT on GPIO9). GPIO20/21 = UART0
+// (TP6/TP5). GPIO18/19 = native USB (TP2/TP3).
 
 // ---- CAN ----------------------------------------------------------------
 // 0x05C17002 (29-bit), 10 Hz: byte 1 = 0x09 auto-brake on, 0x07 off.

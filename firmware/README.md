@@ -1,4 +1,4 @@
-# Firmware: Parking Safety auto-disable (ESP32-C3 SuperMini)
+# Firmware: Parking Safety auto-disable (ESP32-C3)
 
 ESP-IDF firmware for the add-on board in `hardware/esp32c3-recovery/`
 (schematic on branch `t3/esp32c3-recovery-kicad-schematic`, commit
@@ -16,7 +16,7 @@ a simulated parking module and the recorded car captures.
 
 - **CAN, listen-only.** `0x05C17002` (10 Hz): byte 1 `09`/`07` = auto-brake
   on/off; byte 0 bit 0 = warning sound on. TWAI is in listen-only mode with no
-  transmit queue, GPIO5 holds the CAN Pal's S pin high (transmitter off), and
+  transmit queue, GPIO5 holds the TJA1051's S pin high (transmitter off), and
   there is no transmit call in the code. The hardware filter passes only this ID.
 - **Button monitor.** GPIO3 reads pin 5 through the 100k/27k divider, so the
   firmware sees your presses directly (its own presses are masked out). That
@@ -120,7 +120,10 @@ host_test/run.sh                       # logic tests, no hardware
 `tools/flash_pi.sh` copies the four images to the Pi and runs esptool there.
 That needs `uv tool install esptool` on the Pi, which is already done. The
 SuperMini's native USB needs no BOOT button: esptool resets it into the
-bootloader.
+bootloader. The rev C board carries an ESP32-C3-WROOM-02 instead (same GPIOs,
+4 MB flash, so the `supermini` build still fits). Flash it over native USB on
+the USB-C (J6) or TP1-TP4 (5V, D-, D+, GND); if esptool can't reset it, hold
+BOOT and tap RESET. TP5/TP6 carry the UART0 log.
 
 `host_test/run.sh` runs `src/logic.c` two ways:
 - **Against a simulated parking module.** Its variants: toggling during the
@@ -135,9 +138,9 @@ bootloader.
 | GPIO | Use |
 |---|---|
 | 3 (ADC1) | Button monitor: pressed < 0.9 V, released > 1.3 V |
-| 5 | CAN Pal S (silent), always driven high |
-| 6 | CAN Pal TX: assigned to the driver, never used |
-| 7 | CAN Pal RX |
+| 5 | TJA1051 S (silent), always driven high |
+| 6 | TJA1051 TXD: assigned to the driver, never used |
+| 7 | TJA1051 RXD |
 | 10 | Press output (NPN pulls CON1-5 to GND via 200 Ω) |
 
 ## Measured in the car (2026-11-16)

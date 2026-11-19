@@ -6,3 +6,5 @@ out/erc.rpt
 out/netlist.net
 .history/
 __pycache__/
+out/pcb/
+out/jlc/gerbers/
